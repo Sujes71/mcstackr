@@ -507,7 +507,11 @@ struct QueueEnv: Codable, Identifiable, Hashable {
     let host: String
     let port: String
     let user: String
+    let toolImage: String
     let bootstrapServers: String
+    let managementEndpoint: String
+    let vhost: String
+    let brokerUrl: String
     var customActions: [QueueCustom] = []
     let isLocal: Bool
 
@@ -543,7 +547,11 @@ struct QueueEnvDraft: Encodable {
     let port: String
     let user: String
     let password: String
+    let toolImage: String
     let bootstrapServers: String
+    let managementEndpoint: String
+    let vhost: String
+    let brokerUrl: String
 }
 
 struct QueueRunPayload: Encodable {

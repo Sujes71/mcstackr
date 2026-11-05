@@ -448,6 +448,10 @@ struct QueueEnvWizard: View {
     @State private var user = ""
     @State private var password = ""
     @State private var bootstrapServers = ""
+    @State private var toolImage = ""
+    @State private var managementEndpoint = ""
+    @State private var vhost = ""
+    @State private var brokerUrl = ""
     @State private var isSaving = false
     @State private var confirmDelete = false
     @State private var localError: String?
@@ -608,6 +612,26 @@ struct QueueEnvWizard: View {
                         FieldLabel(text: "Bootstrap servers")
                         ThemedTextField(placeholder: "kafka:9092", text: $bootstrapServers)
                     }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        FieldLabel(text: "Tool image")
+                        ThemedTextField(placeholder: "confluentinc/cp-kafka:latest", text: $toolImage)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        FieldLabel(text: "Management endpoint")
+                        ThemedTextField(placeholder: "http://localhost:15672", text: $managementEndpoint)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        FieldLabel(text: "Virtual host")
+                        ThemedTextField(placeholder: "/", text: $vhost)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        FieldLabel(text: "Broker URL")
+                        ThemedTextField(placeholder: "tcp://localhost:61616", text: $brokerUrl)
+                    }
                 }
             }
             .padding(22)
@@ -653,7 +677,11 @@ struct QueueEnvWizard: View {
         host = existing.host
         port = existing.port
         user = existing.user
+        toolImage = existing.toolImage
         bootstrapServers = existing.bootstrapServers
+        managementEndpoint = existing.managementEndpoint
+        vhost = existing.vhost
+        brokerUrl = existing.brokerUrl
     }
 
     private func save() async {
@@ -668,7 +696,11 @@ struct QueueEnvWizard: View {
             port: port.trimmingCharacters(in: .whitespaces),
             user: user,
             password: password,
-            bootstrapServers: bootstrapServers.trimmingCharacters(in: .whitespaces)
+            toolImage: toolImage.trimmingCharacters(in: .whitespaces),
+            bootstrapServers: bootstrapServers.trimmingCharacters(in: .whitespaces),
+            managementEndpoint: managementEndpoint.trimmingCharacters(in: .whitespaces),
+            vhost: vhost.trimmingCharacters(in: .whitespaces),
+            brokerUrl: brokerUrl.trimmingCharacters(in: .whitespaces)
         )
         guard let updated = await state.saveQueueEnv(
             service: serviceName,

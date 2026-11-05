@@ -14,14 +14,18 @@ import (
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 type queueEnvDTO struct {
-	Name             string           `json:"name"`
-	QueueType        string           `json:"queueType"`
-	Host             string           `json:"host"`
-	Port             string           `json:"port"`
-	User             string           `json:"user"`
-	BootstrapServers string           `json:"bootstrapServers"`
-	CustomActions    []queueCustomDTO `json:"customActions"`
-	IsLocal          bool             `json:"isLocal"`
+	Name               string           `json:"name"`
+	QueueType          string           `json:"queueType"`
+	Host               string           `json:"host"`
+	Port               string           `json:"port"`
+	User               string           `json:"user"`
+	ToolImage          string           `json:"toolImage"`
+	BootstrapServers   string           `json:"bootstrapServers"`
+	ManagementEndpoint string           `json:"managementEndpoint"`
+	VHost              string           `json:"vhost"`
+	BrokerURL          string           `json:"brokerUrl"`
+	CustomActions      []queueCustomDTO `json:"customActions"`
+	IsLocal            bool             `json:"isLocal"`
 }
 
 // queueCustomDTO is a custom action of a queue environment.
@@ -54,14 +58,17 @@ type queueRunRequest struct {
 }
 
 type queueSyncEnvRequest struct {
-	Name             string `json:"name"`
-	QueueType        string `json:"queueType"`
-	Host             string `json:"host"`
-	Port             string `json:"port"`
-	User             string `json:"user"`
-	Password         string `json:"password"`
-	BootstrapServers string `json:"bootstrapServers"`
-	BrokerURL        string `json:"brokerUrl"`
+	Name               string `json:"name"`
+	QueueType          string `json:"queueType"`
+	Host               string `json:"host"`
+	Port               string `json:"port"`
+	User               string `json:"user"`
+	Password           string `json:"password"`
+	ToolImage          string `json:"toolImage"`
+	BootstrapServers   string `json:"bootstrapServers"`
+	ManagementEndpoint string `json:"managementEndpoint"`
+	VHost              string `json:"vhost"`
+	BrokerURL          string `json:"brokerUrl"`
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -145,13 +152,17 @@ func (s *Server) handleQueueOps(w http.ResponseWriter, r *http.Request) {
 		}}
 		for _, qse := range svc.QueueSyncEnvs {
 			env := queueEnvDTO{
-				Name:             qse.Name,
-				QueueType:        qse.QueueType,
-				Host:             qse.Host,
-				Port:             qse.Port,
-				User:             qse.User,
-				BootstrapServers: qse.BootstrapServers,
-				CustomActions:    make([]queueCustomDTO, 0, len(qse.CustomActions)),
+				Name:               qse.Name,
+				QueueType:          qse.QueueType,
+				Host:               qse.Host,
+				Port:               qse.Port,
+				User:               qse.User,
+				ToolImage:          qse.ToolImage,
+				BootstrapServers:   qse.BootstrapServers,
+				ManagementEndpoint: qse.ManagementEndpoint,
+				VHost:              qse.VHost,
+				BrokerURL:          qse.BrokerURL,
+				CustomActions:      make([]queueCustomDTO, 0, len(qse.CustomActions)),
 			}
 			for _, action := range qse.CustomActions {
 				env.CustomActions = append(env.CustomActions, queueCustomDTO{
@@ -580,14 +591,17 @@ func (s *Server) handleAddQueueSyncEnv(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		qse := config.QueueSyncEnv{
-			Name:             req.Name,
-			QueueType:        strings.TrimSpace(req.QueueType),
-			Host:             strings.TrimSpace(req.Host),
-			Port:             strings.TrimSpace(req.Port),
-			User:             req.User,
-			Password:         req.Password,
-			BootstrapServers: strings.TrimSpace(req.BootstrapServers),
-			BrokerURL:        strings.TrimSpace(req.BrokerURL),
+			Name:               req.Name,
+			QueueType:          strings.TrimSpace(req.QueueType),
+			Host:               strings.TrimSpace(req.Host),
+			Port:               strings.TrimSpace(req.Port),
+			User:               req.User,
+			Password:           req.Password,
+			ToolImage:          strings.TrimSpace(req.ToolImage),
+			BootstrapServers:   strings.TrimSpace(req.BootstrapServers),
+			ManagementEndpoint: strings.TrimSpace(req.ManagementEndpoint),
+			VHost:              strings.TrimSpace(req.VHost),
+			BrokerURL:          strings.TrimSpace(req.BrokerURL),
 		}
 		if qse.QueueType == "" {
 			qse.QueueType = svc.QueueType()
@@ -659,7 +673,10 @@ func (s *Server) handleUpdateQueueSyncEnv(w http.ResponseWriter, r *http.Request
 		qse.Host = strings.TrimSpace(req.Host)
 		qse.Port = strings.TrimSpace(req.Port)
 		qse.User = req.User
+		qse.ToolImage = strings.TrimSpace(req.ToolImage)
 		qse.BootstrapServers = strings.TrimSpace(req.BootstrapServers)
+		qse.ManagementEndpoint = strings.TrimSpace(req.ManagementEndpoint)
+		qse.VHost = strings.TrimSpace(req.VHost)
 		qse.BrokerURL = strings.TrimSpace(req.BrokerURL)
 		if req.Password != "" {
 			if err := qse.SetPassword(req.Password); err != nil {
@@ -883,13 +900,17 @@ func (s *Server) writeQueueOps(w http.ResponseWriter, profileName, envName, serv
 		}}
 		for _, qse := range svc.QueueSyncEnvs {
 			env := queueEnvDTO{
-				Name:             qse.Name,
-				QueueType:        qse.QueueType,
-				Host:             qse.Host,
-				Port:             qse.Port,
-				User:             qse.User,
-				BootstrapServers: qse.BootstrapServers,
-				CustomActions:    make([]queueCustomDTO, 0, len(qse.CustomActions)),
+				Name:               qse.Name,
+				QueueType:          qse.QueueType,
+				Host:               qse.Host,
+				Port:               qse.Port,
+				User:               qse.User,
+				ToolImage:          qse.ToolImage,
+				BootstrapServers:   qse.BootstrapServers,
+				ManagementEndpoint: qse.ManagementEndpoint,
+				VHost:              qse.VHost,
+				BrokerURL:          qse.BrokerURL,
+				CustomActions:      make([]queueCustomDTO, 0, len(qse.CustomActions)),
 			}
 			for _, action := range qse.CustomActions {
 				env.CustomActions = append(env.CustomActions, queueCustomDTO{
