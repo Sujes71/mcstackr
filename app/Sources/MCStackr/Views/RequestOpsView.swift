@@ -9,6 +9,8 @@ struct RequestOpsView: View {
     @State private var selectedEnv: String = ""
     @State private var sheetTarget: SheetTarget?
     @State private var errorText: String?
+    /// The folders the user has collapsed.
+    @State private var collapsed: Set<String> = []
 
     private enum SheetTarget: Identifiable {
         case folder(folder: String?, url: String)
@@ -52,16 +54,11 @@ struct RequestOpsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if let response, !response.envs.isEmpty {
-                    envPicker(response)
+                    envRow(response)
 
                     ForEach(folders, id: \.self) { folder in
-                        folderSection(folder)
+                        folderTree(folder)
                     }
-
-                    ActionTextButton(title: "Add folder", systemName: "plus", tint: Theme.textMuted) {
-                        sheetTarget = .folder(folder: nil, url: "")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 } else if response != nil {
                     emptyState
                 } else {
@@ -80,9 +77,9 @@ struct RequestOpsView: View {
         .scrollIndicators(.hidden)
         .task { await reload() }
         .onChange(of: state.pendingSectionAction) { _, action in
-            guard action == .addRequestFolder else { return }
+            guard action == .addRequestEnv else { return }
             state.pendingSectionAction = nil
-            sheetTarget = .folder(folder: nil, url: "")
+            sheetTarget = .newEnv
         }
         .sheet(item: $sheetTarget) { target in
             switch target {
@@ -163,7 +160,9 @@ struct RequestOpsView: View {
         .padding(.vertical, 40)
     }
 
-    private func envPicker(_ payload: RequestsResponse) -> some View {
+    /// The environment in use. It is the root of the tree: its folders hang
+    /// from it.
+    private func envRow(_ payload: RequestsResponse) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text("REQUEST ENVIRONMENT")
@@ -173,9 +172,9 @@ struct RequestOpsView: View {
 
                 Spacer()
 
-            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add request environment") {
-                sheetTarget = .newEnv
-            }
+                ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add folder") {
+                    sheetTarget = .folder(folder: nil, url: "")
+                }
 
                 if let env, env.name != "local" {
                     ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Remove request environment") {
@@ -199,15 +198,14 @@ struct RequestOpsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .onChange(of: selectedEnv) { _, _ in
-                    sheetTarget = nil
-                }
             } else if let env = payload.envs.first {
                 HStack(spacing: 8) {
+                    Image(systemName: "shippingbox")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
                     Text(env.name)
                         .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                         .foregroundStyle(Theme.text)
-                    TechBadge(text: "\(env.baseUrls.count) base URLs", color: Theme.info)
                     Spacer()
                 }
                 .padding(11)
@@ -217,22 +215,46 @@ struct RequestOpsView: View {
         }
     }
 
-    private func folderSection(_ folder: String) -> some View {
+    /// A folder: its name sits next to it, and it holds the requests that
+    /// use it. It can be folded and unfolded.
+    private func folderTree(_ folder: String) -> some View {
         let url = env?.baseUrls.first { $0.name == folder }?.url ?? ""
         let items = requests(in: folder)
+        let isCollapsed = collapsed.contains(folder)
 
-        return FormSection(folder) {
-            HStack(spacing: 10) {
-                Image(systemName: url.isEmpty ? "folder" : "folder.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(url.isEmpty ? Theme.textDim : Theme.info)
-                    .frame(width: 22)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button {
+                    if isCollapsed {
+                        collapsed.remove(folder)
+                    } else {
+                        collapsed.insert(folder)
+                    }
+                } label: {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Theme.textDim)
+                        .frame(width: 14, height: 14)
+                }
+                .buttonStyle(.plain)
+                .help(isCollapsed ? "Expand" : "Collapse")
 
-                Text(url.isEmpty ? "no URL in this environment" : url)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(url.isEmpty ? Theme.textDim : Theme.textMuted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.info)
+                    .frame(width: 18)
+
+                Text(folder)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+
+                if !url.isEmpty {
+                    Text(url)
+                        .font(Theme.monoSmall)
+                        .foregroundStyle(Theme.textDim)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
 
                 Spacer(minLength: 8)
 
@@ -254,15 +276,18 @@ struct RequestOpsView: View {
                     }
                 }
             }
+            .padding(.vertical, 2)
 
-            if items.isEmpty {
-                Text("No requests in this folder yet.")
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(Theme.textDim)
-            }
-
-            ForEach(items) { request in
-                requestRow(request)
+            if !isCollapsed {
+                ForEach(items) { request in
+                    requestRow(request)
+                }
+                if items.isEmpty {
+                    Text("No requests in this folder.")
+                        .font(.system(size: 10.5, design: .rounded))
+                        .foregroundStyle(Theme.textDim)
+                        .padding(.leading, 40)
+                }
             }
         }
     }
@@ -317,6 +342,7 @@ struct RequestOpsView: View {
             }
         }
         .padding(.vertical, 2)
+        .padding(.leading, 40)
     }
 
     private var hasToken: Bool {

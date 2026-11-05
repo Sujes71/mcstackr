@@ -286,8 +286,8 @@ private struct HeaderView: View {
     @ViewBuilder
     private var requestActions: some View {
         if state.selectedProfile != nil {
-            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add folder") {
-                state.pendingSectionAction = .addRequestFolder
+            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add request environment") {
+                state.pendingSectionAction = .addRequestEnv
             }
         }
     }

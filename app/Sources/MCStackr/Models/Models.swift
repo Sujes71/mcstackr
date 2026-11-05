@@ -344,7 +344,7 @@ struct SyncEnvDraft: Encodable {
 
 /// An action the header of a section asks that section to run.
 enum SectionAction: Equatable {
-    case addRequestFolder
+    case addRequestEnv
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
