@@ -237,6 +237,22 @@ struct RequestOpsView: View {
                 }
             }
 
+            if let env = payload.envs.first(where: { $0.name == selectedEnv }) ?? payload.envs.first {
+                HStack(spacing: 9) {
+                    Image(systemName: "shippingbox")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                    Text(env.name)
+                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                    Spacer(minLength: 8)
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+
             if payload.envs.count > 1 {
                 Picker("Request environment", selection: $selectedEnv) {
                     ForEach(payload.envs) { env in
@@ -245,19 +261,6 @@ struct RequestOpsView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-            } else if let env = payload.envs.first {
-                HStack(spacing: 8) {
-                    Image(systemName: "shippingbox")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                    Text(env.name)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.text)
-                    Spacer()
-                }
-                .padding(11)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
         }
     }
@@ -1443,22 +1446,43 @@ extension RequestDefinition {
         return found
     }
 
-    /// The variables a run needs: the ones the request references and the
-    /// ones the address of its folder references. Where they are written does
-    /// not matter: a {variable} in the address of a folder is needed by every
-    /// request that uses it.
+    /// The variables a run needs, in the order they are asked: the ones of the
+    /// address of the folder first, then the path, the headers, the params and
+    /// the body. Where they are written does not matter: a {variable} in the
+    /// address of a folder is needed by every request that uses it.
     func runVariables(folderURL: String) -> [String] {
         var names: [String] = []
-        for name in variableRefs where !names.contains(name) {
-            names.append(name)
+        func add(_ list: [String]) {
+            for name in list where name != "token" && !names.contains(name) {
+                names.append(name)
+            }
         }
-        for name in placeholders where !names.contains(name) {
-            names.append(name)
-        }
-        for name in folderURL.variablePlaceholders where name != "token" && !names.contains(name) {
-            names.append(name)
-        }
+        add(folderURL.variablePlaceholders)
+        add(orderedPlaceholders)
+        add(variableRefs)
         return names
+    }
+
+    /// The variables of the request itself, in the order they appear in it:
+    /// the path, then the headers, then the params, then the body.
+    var orderedPlaceholders: [String] {
+        var found: [String] = []
+        func add(_ text: String) {
+            for name in text.variablePlaceholders where name != "token" && !found.contains(name) {
+                found.append(name)
+            }
+        }
+        add(path)
+        for header in headers {
+            add(header.key)
+            add(header.value)
+        }
+        for param in params {
+            add(param.key)
+            add(param.value)
+        }
+        add(body)
+        return found
     }
 }
 

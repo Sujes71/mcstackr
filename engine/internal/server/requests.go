@@ -229,15 +229,14 @@ func (s *Server) handleRunRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Every variable the request and the address of its folder reference has
 	// to have a value, wherever it was written.
-	needed := variableNamesIn([]string{
-		def.Path, def.Body, baseURL,
-	})
+	needed := variableNamesIn([]string{baseURL, def.Path})
 	for _, h := range def.Headers {
 		needed = append(needed, variableNamesIn([]string{h.Key, h.Value})...)
 	}
 	for _, param := range def.Params {
 		needed = append(needed, variableNamesIn([]string{param.Key, param.Value})...)
 	}
+	needed = append(needed, variableNamesIn([]string{def.Body})...)
 	var missing []string
 	seen := map[string]bool{}
 	for _, name := range needed {
@@ -728,27 +727,17 @@ var requestVariablePattern = regexp.MustCompile(`\{([\w-]+)\}`)
 // order they appear and without duplicates. The token is not one of them: it
 // comes from the login request.
 func requestVariableNames(def config.RequestDef) []string {
-	texts := []string{def.Path, def.Body}
+	// The same order the app asks them in: path, headers, params, body.
+	var texts []string
+	texts = append(texts, def.Path)
 	for _, h := range def.Headers {
 		texts = append(texts, h.Key, h.Value)
 	}
 	for _, p := range def.Params {
 		texts = append(texts, p.Key, p.Value)
 	}
-
-	var names []string
-	seen := map[string]bool{}
-	for _, text := range texts {
-		for _, match := range requestVariablePattern.FindAllStringSubmatch(text, -1) {
-			name := match[1]
-			if name == "token" || seen[name] {
-				continue
-			}
-			seen[name] = true
-			names = append(names, name)
-		}
-	}
-	return names
+	texts = append(texts, def.Body)
+	return variableNamesIn(texts)
 }
 
 // ensureRequestVariables creates in the environment the variables the request
