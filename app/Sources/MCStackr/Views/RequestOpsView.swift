@@ -59,6 +59,8 @@ struct RequestOpsView: View {
                     ForEach(folders, id: \.self) { folder in
                         folderTree(folder)
                     }
+
+                    addFolderRow
                 } else if response != nil {
                     emptyState
                 } else {
@@ -172,10 +174,6 @@ struct RequestOpsView: View {
 
                 Spacer()
 
-                ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add folder") {
-                    sheetTarget = .folder(folder: nil, url: "")
-                }
-
                 if let env, env.name != "local" {
                     ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Remove request environment") {
                         Task {
@@ -213,6 +211,33 @@ struct RequestOpsView: View {
                 .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
         }
+    }
+
+    /// Adding a folder belongs to the folder level, so the affordance sits
+    /// with the folders instead of next to the environment.
+    private var addFolderRow: some View {
+        HStack(spacing: 8) {
+            Color.clear
+                .frame(width: 14, height: 14)
+
+            Image(systemName: "folder.badge.plus")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.textDim)
+                .frame(width: 18)
+
+            Button {
+                sheetTarget = .folder(folder: nil, url: "")
+            } label: {
+                Text("Add folder")
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Theme.textDim)
+            }
+            .buttonStyle(.plain)
+            .help("Add a folder to this environment")
+
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 2)
     }
 
     /// A folder: its name sits next to it, and it holds the requests that
