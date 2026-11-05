@@ -963,6 +963,98 @@ final class AppState: ObservableObject {
         ISO8601DateFormatter().string(from: Date())
     }
 
+    // MARK: - Queue operations
+
+    func fetchQueueOps(service: String) async -> QueueOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func runQueueOp(service: String, env: String, action: String, params: [String: String]) async -> String? {
+        guard let client, let profileName = selectedProfileName, let dockerEnv = dockerEnvironment else { return nil }
+        do {
+            let result: QueueRunResult = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(dockerEnv.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/run",
+                body: QueueRunPayload(env: env, action: action, params: params)
+            )
+            return result.output
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func saveQueueEnv(service: String, originalName: String?, draft: QueueEnvDraft) async -> QueueOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        let base = "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/sync-envs"
+        do {
+            if let originalName {
+                return try await client.patch("\(base)/\(originalName.pathComponentEncoded)", body: draft)
+            }
+            return try await client.post(base, body: draft)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteQueueEnv(service: String, name: String) async -> QueueOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/sync-envs/\(name.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func addQueueCustom(service: String, env: String, draft: QueueCustomDraft) async -> QueueOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let dockerEnv = dockerEnvironment else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(dockerEnv.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/sync-envs/\(env.pathComponentEncoded)/actions",
+                body: draft
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func updateQueueCustom(service: String, env: String, action: String, draft: QueueCustomDraft) async -> QueueOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let dockerEnv = dockerEnvironment else { return nil }
+        do {
+            return try await client.patch(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(dockerEnv.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/sync-envs/\(env.pathComponentEncoded)/actions/\(action.pathComponentEncoded)",
+                body: draft
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteQueueCustom(service: String, env: String, action: String) async -> QueueOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let dockerEnv = dockerEnvironment else { return nil }
+        do {
+            return try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(dockerEnv.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/sync-envs/\(env.pathComponentEncoded)/actions/\(action.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     // MARK: - DB operations
 
     func fetchDBOps(service: String) async -> DBOpsInfo? {

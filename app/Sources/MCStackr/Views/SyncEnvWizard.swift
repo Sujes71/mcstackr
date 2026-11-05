@@ -112,10 +112,6 @@ struct SyncEnvWizard: View {
 
             Spacer()
 
-            ActionTextButton(title: "Cancel", systemName: nil) {
-                dismiss()
-            }
-
             ActionTextButton(
                 title: isSaving ? "Saving…" : (isEdit ? "Save" : "Add"),
                 systemName: isEdit ? "checkmark" : "plus",

@@ -490,3 +490,68 @@ struct RequestRunResult: Codable {
 
     var isSuccess: Bool { (200..<300).contains(status) }
 }
+
+
+// MARK: - Queue operations
+
+struct QueueCustom: Codable, Identifiable, Hashable {
+    let name: String
+    let command: String
+
+    var id: String { name }
+}
+
+struct QueueEnv: Codable, Identifiable, Hashable {
+    let name: String
+    let queueType: String
+    let host: String
+    let port: String
+    let user: String
+    let bootstrapServers: String
+    var customActions: [QueueCustom] = []
+    let isLocal: Bool
+
+    var id: String { name }
+}
+
+struct QueueCustomDraft: Encodable {
+    let name: String
+    let command: String
+}
+
+struct QueueAction: Codable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let group: String
+    let params: [String]?
+    let destructive: Bool
+    let enabled: Bool
+    let disabledReason: String?
+}
+
+struct QueueOpsInfo: Codable {
+    let queueType: String
+    let envs: [QueueEnv]
+    let actions: [QueueAction]
+    let running: Bool
+}
+
+struct QueueEnvDraft: Encodable {
+    let name: String
+    let queueType: String
+    let host: String
+    let port: String
+    let user: String
+    let password: String
+    let bootstrapServers: String
+}
+
+struct QueueRunPayload: Encodable {
+    let env: String
+    let action: String
+    let params: [String: String]
+}
+
+struct QueueRunResult: Codable {
+    let output: String
+}

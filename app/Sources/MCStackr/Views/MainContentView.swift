@@ -6,6 +6,7 @@ struct MainContentView: View {
 
     @State private var showAddService = false
     @State private var dbOpsService: ServiceStatus?
+    @State private var queueOpsService: ServiceStatus?
     @State private var deleteTarget: DeleteTarget?
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
@@ -64,6 +65,10 @@ struct MainContentView: View {
         }
         .sheet(item: $dbOpsService) { service in
             DBOpsView(service: service)
+                .environmentObject(state)
+        }
+        .sheet(item: $queueOpsService) { service in
+            QueueOpsView(service: service)
                 .environmentObject(state)
         }
         .sheet(item: $editingService) { service in
@@ -155,6 +160,7 @@ struct MainContentView: View {
                                     )
                                 },
                                 onDBOps: { dbOpsService = service },
+                                onQueueOps: { queueOpsService = service },
                                 onDelete: { deleteTarget = .service(service) }
                             )
                         }
@@ -688,6 +694,7 @@ private struct ServiceCard: View {
     let onOpen: () -> Void
     let onLogs: () -> Void
     let onDBOps: () -> Void
+    let onQueueOps: () -> Void
     let onDelete: () -> Void
 
     @State private var hovering = false
@@ -718,6 +725,15 @@ private struct ServiceCard: View {
                         tint: Theme.info,
                         help: "DB operations",
                         action: onDBOps
+                    )
+                }
+
+                if service.kind == "QUEUE" {
+                    ActionIconButton(
+                        systemName: "tray.full",
+                        tint: Theme.info,
+                        help: "Queue operations",
+                        action: onQueueOps
                     )
                 }
 

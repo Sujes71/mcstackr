@@ -119,10 +119,6 @@ struct CustomActionWizard: View {
 
             Spacer()
 
-            ActionTextButton(title: "Cancel", systemName: nil) {
-                dismiss()
-            }
-
             ActionTextButton(
                 title: isSaving ? "Saving…" : (isEdit ? "Save" : "Add"),
                 systemName: isEdit ? "checkmark" : "plus",
@@ -306,7 +302,6 @@ struct CustomActionParamsView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
-                ActionTextButton(title: "Cancel", systemName: nil) { dismiss() }
                 ActionTextButton(title: "Run", systemName: "play.fill", prominent: true) {
                     onRun(values.mapValues { $0.trimmingCharacters(in: .whitespaces) })
                     dismiss()

@@ -660,10 +660,6 @@ struct BaseURLWizard: View {
 
             Spacer()
 
-            ActionTextButton(title: "Cancel", systemName: nil) {
-                dismiss()
-            }
-
             ActionTextButton(
                 title: isSaving ? "Saving…" : (isEdit ? "Save" : "Add"),
                 systemName: isEdit ? "checkmark" : "plus",
@@ -914,10 +910,6 @@ struct RequestWizard: View {
 
             Spacer()
 
-            ActionTextButton(title: "Cancel", systemName: nil) {
-                dismiss()
-            }
-
             ActionTextButton(
                 title: isSaving ? "Saving…" : (isEdit ? "Save" : "Add"),
                 systemName: isEdit ? "checkmark" : "plus",
@@ -1083,7 +1075,6 @@ struct RequestEnvWizard: View {
 
             HStack(spacing: 10) {
                 Spacer()
-                ActionTextButton(title: "Cancel", systemName: nil) { dismiss() }
                 ActionTextButton(title: isSaving ? "Saving…" : "Add", systemName: "plus", prominent: true) {
                     Task { await save() }
                 }
