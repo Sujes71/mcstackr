@@ -44,6 +44,26 @@ final class AppState: ObservableObject {
             selectedRequestEnv = envs.first?.name ?? ""
         }
     }
+
+    /// The environment in use, with its current variables.
+    func requestEnv(_ name: String) -> RequestEnvironment? {
+        requestEnvs.first { $0.name == name }
+    }
+
+    /// Keeps a variable the user wrote, so the window shows the last value
+    /// even before the collection is refreshed.
+    func setRequestVariable(env: String, name: String, value: String) {
+        guard let index = requestEnvs.firstIndex(where: { $0.name == env }) else { return }
+        if let variable = requestEnvs[index].variables.first(where: { $0.name == name }) {
+            requestEnvs[index].variables[variableIndex(name, in: index)].value = value
+        } else {
+            requestEnvs[index].variables.append(RequestVariable(name: name, value: value))
+        }
+    }
+
+    private func variableIndex(_ name: String, in envIndex: Int) -> Int {
+        requestEnvs[envIndex].variables.firstIndex { $0.name == name } ?? 0
+    }
     /// Bumped on every refresh, so the views reload what they show.
     @Published private(set) var refreshToken = 0
     /// DB operations started from the app. They live in the engine, so they

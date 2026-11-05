@@ -170,12 +170,10 @@ struct RequestOpsView: View {
                 )
                 .environmentObject(state)
             case .run(let request):
-                if let env {
-                    RequestRunSheet(request: request, env: env) {
-                        Task { await reload() }
-                    }
-                    .environmentObject(state)
+                RequestRunSheet(request: request, envName: selectedEnv) {
+                    Task { await reload() }
                 }
+                .environmentObject(state)
             case .newEnv:
                 RequestEnvWizard { updated in
                     response = updated
@@ -1119,7 +1117,12 @@ struct RequestRunSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let request: RequestDefinition
-    let env: RequestEnvironment
+    let envName: String
+
+    /// The environment in use, with the variables as they are right now.
+    private var env: RequestEnvironment {
+        state.requestEnv(envName) ?? RequestEnvironment(name: envName, baseUrls: [], variables: [])
+    }
     /// Called when the run finishes, so the collection can be refreshed and
     /// the variables keep the value they were given.
     var onFinished: () -> Void = {}
@@ -1359,6 +1362,11 @@ struct RequestRunSheet: View {
     private func run() {
         localError = nil
         isRunning = true
+        // The value the user wrote is the last one from now on: it is saved
+        // when the request is launched.
+        for (name, value) in values {
+            state.setRequestVariable(env: envName, name: name, value: value)
+        }
         Task {
             let (outcome, failure) = await state.runRequestTracked(
                 env: env.name,
