@@ -268,6 +268,160 @@ final class AppState: ObservableObject {
         return success
     }
 
+    // MARK: - Port forwards
+
+    var portForwardEnvName: String? { portForwardEnvironment?.name }
+
+    func k8sAvailable() async -> Bool {
+        guard let client else { return false }
+        struct Response: Decodable { let available: Bool }
+        let response: Response? = try? await client.get("/api/k8s/status")
+        return response?.available ?? false
+    }
+
+    func k8sContexts() async throws -> [String] {
+        guard let client else { return [] }
+        return try await client.get("/api/k8s/contexts")
+    }
+
+    func k8sNamespaces(context: String) async throws -> [String] {
+        guard let client else { return [] }
+        return try await client.get(
+            "/api/k8s/namespaces",
+            query: [URLQueryItem(name: "context", value: context)]
+        )
+    }
+
+    func k8sServices(context: String, namespace: String) async throws -> [DiscoveredService] {
+        guard let client else { return [] }
+        return try await client.get(
+            "/api/k8s/services",
+            query: [
+                URLQueryItem(name: "context", value: context),
+                URLQueryItem(name: "namespace", value: namespace),
+            ]
+        )
+    }
+
+    /// First local port from 8080 that no configured forward already uses.
+    func nextFreeLocalPort() -> Int {
+        let used = Set((environmentDetail?.portForwards ?? []).map(\.localPort))
+        var port = 8080
+        while used.contains(port) { port += 1 }
+        return port
+    }
+
+    func addPortForward(
+        name: String,
+        localPort: Int,
+        remotePort: Int,
+        context: String,
+        namespace: String,
+        service: String
+    ) async -> Bool {
+        guard let client, let profileName = selectedProfileName, let env = portForwardEnvironment else { return false }
+        var success = false
+        await runPortForward(action: "add \(name)") {
+            let detail: EnvironmentDetail = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/port-forwards",
+                body: PortForwardRequest(
+                    name: name,
+                    localPort: localPort,
+                    remotePort: remotePort,
+                    k8sContext: context,
+                    k8sNamespace: namespace,
+                    k8sService: service
+                )
+            )
+            self.environmentDetail = detail
+            success = true
+        }
+        return success
+    }
+
+    func updatePortForward(named name: String, localPort: Int) async -> Bool {
+        guard let client, let profileName = selectedProfileName, let env = portForwardEnvironment else { return false }
+        guard let existing = environmentDetail?.portForwards.first(where: { $0.name == name }) else { return false }
+        var success = false
+        await runPortForward(action: "update \(name)") {
+            let detail: EnvironmentDetail = try await client.patch(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/port-forwards/\(name.pathComponentEncoded)",
+                body: PortForwardRequest(
+                    name: existing.name,
+                    localPort: localPort,
+                    remotePort: existing.remotePort,
+                    k8sContext: existing.k8sContext,
+                    k8sNamespace: existing.k8sNamespace,
+                    k8sService: existing.k8sService
+                )
+            )
+            self.environmentDetail = detail
+            success = true
+        }
+        return success
+    }
+
+    func deletePortForward(named name: String) async -> Bool {
+        guard let client, let profileName = selectedProfileName, let env = portForwardEnvironment else { return false }
+        var success = false
+        await runPortForward(action: "delete \(name)") {
+            try await client.deleteVoid(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/port-forwards/\(name.pathComponentEncoded)"
+            )
+            success = true
+        }
+        return success
+    }
+
+    func startPortForward(_ forward: PortForwardInfo) async {
+        guard let client, let profileName = selectedProfileName, let env = portForwardEnvironment else { return }
+        await runPortForward(action: "start \(forward.name)") {
+            let _: PortForwardRuntime = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/port-forwards/\(forward.name.pathComponentEncoded)/actions/start"
+            )
+        }
+    }
+
+    func stopPortForward(_ forward: PortForwardInfo) async {
+        guard let client, let profileName = selectedProfileName, let env = portForwardEnvironment else { return }
+        await runPortForward(action: "stop \(forward.name)") {
+            let _: PortForwardRuntime = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/port-forwards/\(forward.name.pathComponentEncoded)/actions/stop"
+            )
+        }
+    }
+
+    func startAllPortForwards() async {
+        await performPortForwardsAction("start")
+    }
+
+    func stopAllPortForwards() async {
+        await performPortForwardsAction("stop")
+    }
+
+    private func performPortForwardsAction(_ action: String) async {
+        guard let client, let profileName = selectedProfileName, let env = portForwardEnvironment else { return }
+        await runPortForward(action: "\(action) all port-forwards") {
+            let detail: EnvironmentDetail = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/port-forwards/actions/\(action)"
+            )
+            self.environmentDetail = detail
+        }
+    }
+
+    private func runPortForward(action: String, operation: @escaping () async throws -> Void) async {
+        guard runningAction == nil else { return }
+        runningAction = action
+        defer { runningAction = nil }
+        do {
+            try await operation()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        await refreshEnvironmentDetail()
+        try? await reloadProfiles()
+    }
+
     func createWorkspace(name: String, description: String) async -> Bool {
         guard let client else { return false }
         do {
@@ -486,6 +640,9 @@ final class AppState: ObservableObject {
                 guard let self, !Task.isCancelled else { return }
                 if self.runningAction == nil, self.selectedProfileName != nil {
                     await self.refreshStatus()
+                    if self.section == .portForward {
+                        await self.refreshEnvironmentDetail()
+                    }
                 }
             }
         }

@@ -160,8 +160,34 @@ struct PortForwardInfo: Codable, Identifiable, Hashable {
     let k8sContext: String
     let k8sNamespace: String
     let k8sService: String
+    let state: String
+    let error: String?
 
     var id: String { name }
+
+    var isRunning: Bool { state.lowercased() == "running" }
+    var isBusy: Bool { state.lowercased() == "starting" }
+}
+
+struct DiscoveredService: Codable, Identifiable, Hashable {
+    let name: String
+    let remotePort: Int
+
+    var id: String { name }
+}
+
+struct PortForwardRuntime: Codable {
+    let state: String
+    let error: String?
+}
+
+struct PortForwardRequest: Codable {
+    let name: String
+    let localPort: Int
+    let remotePort: Int
+    let k8sContext: String
+    let k8sNamespace: String
+    let k8sService: String
 }
 
 struct LocalProcessInfo: Codable, Identifiable, Hashable {

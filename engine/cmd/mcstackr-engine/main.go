@@ -97,6 +97,9 @@ func main() {
 		}
 	}
 
+	// Stop kubectl port-forward subprocesses before the process disappears.
+	srv.Shutdown()
+
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer shutdownCancel()
 	_ = httpSrv.Shutdown(shutdownCtx)

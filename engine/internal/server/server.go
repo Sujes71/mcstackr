@@ -18,6 +18,7 @@ type Server struct {
 	token   string
 	store   *Store
 	mux     *http.ServeMux
+	pf      *portForwardManager
 }
 
 func New(token, version string) (*Server, error) {
@@ -30,6 +31,7 @@ func New(token, version string) (*Server, error) {
 		token:   token,
 		store:   store,
 		mux:     http.NewServeMux(),
+		pf:      newPortForwardManager(),
 	}
 	s.routes()
 	return s, nil
@@ -53,6 +55,17 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services", s.handleAddService)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/services/{service}", s.handleDeleteService)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/actions/{action}", s.handleServiceAction)
+
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/port-forwards", s.handleAddPortForward)
+	s.mux.HandleFunc("PATCH /api/profiles/{profile}/envs/{env}/port-forwards/{name}", s.handleUpdatePortForward)
+	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/port-forwards/{name}", s.handleDeletePortForward)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/port-forwards/actions/{action}", s.handlePortForwardsAction)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/port-forwards/{name}/actions/{action}", s.handlePortForwardAction)
+
+	s.mux.HandleFunc("GET /api/k8s/status", s.handleK8sStatus)
+	s.mux.HandleFunc("GET /api/k8s/contexts", s.handleK8sContexts)
+	s.mux.HandleFunc("GET /api/k8s/namespaces", s.handleK8sNamespaces)
+	s.mux.HandleFunc("GET /api/k8s/services", s.handleK8sServices)
 
 	s.mux.HandleFunc("GET /api/hub/catalog", s.handleCatalog)
 	s.mux.HandleFunc("GET /api/hub/tags", s.handleHubTags)

@@ -73,6 +73,22 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   instead of leaving the stale one behind.
 - **S28** — "Stop all" stops containers (`compose stop`) instead of `compose
   down`, so it no longer removes them.
+- **S29** — The Port Forwards section lists each configured forward with its
+  live state (`stopped`/`starting`/`running`/`failed`), `local → remote` and
+  `context · namespace/service`, plus per-row start/stop.
+- **S30** — Adding a forward is discovery driven: context → namespace →
+  service → local port. The local port defaults to the first free port from
+  8080 and must be `1..65535` and unused; the forward name is the service name
+  and the remote port comes from the service.
+- **S31** — Start runs `kubectl port-forward --context <ctx> -n <ns>
+  service/<svc> <local>:<remote>`; it is `running` only after surviving 2s,
+  fast failures surface kubectl's stderr, and state refreshes while the
+  section is open.
+- **S32** — Stop stops the subprocess; Start all / Stop all act on every
+  forward; deleting stops the forward first; engine shutdown stops every
+  child process.
+- **S33** — Editing changes the local port only; a running forward restarts
+  with the new port.
 - **S24** — All sheets share one shell (header with a single close, divider,
   scrolling body, divider, footer) and the same `FormSection` heading: a
   centered, larger title with hairline rules. New workspace, workspace
@@ -117,6 +133,12 @@ MockServer, request collections, git operations.
 - [x] T27 — Engine: port-conflict validation on add and update. Evidence: duplicate host port 400 with owner, same-service duplicate 400.
 - [x] T28 — Engine: service delete removes container + named volumes; last-service delete writes `services: {}`. Evidence: alpha removed from compose, last delete leaves valid empty compose, `/compose` 200.
 - [x] T29 — Engine + UI: `stop` env action and "Stop all" uses it. Evidence: `actions/stop` 200, compose unchanged.
+- [x] T30 — Engine: copied the Stackr port-forward runtime (start/stop/state, 512-byte stderr ring, 2s fast-fail) and added a per profile+env manager. Evidence: start → running after 2s; kill → failed with `process exited unexpectedly`; shutdown leaves 0 children.
+- [x] T31 — Engine: discovery endpoints (`/api/k8s/status|contexts|namespaces|services`). Evidence: fake kubectl returned ctx-a, default/prod and api/web with their ports.
+- [x] T32 — Engine: port-forward CRUD + start/stop/start-all/stop-all with validation (name, 1..65535, duplicate name, local-port conflict). Evidence: 201/400/400/400/200/204 as expected; `port_forwards` persisted.
+- [x] T33 — Swift: `PortForwardInfo.state/error`, discovery + action methods, 3s state refresh while the section is open.
+- [x] T34 — Swift: row state dot + start/stop, editor sheet with local port and red delete, header Start all/Stop all and add.
+- [x] T35 — Swift: discovery wizard sheet (context → namespace → service → local port). Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
 
@@ -199,3 +221,14 @@ MockServer, request collections, git operations.
   `local` + `dev`. Delete workspace stops containers best effort, then removes
   the profile. Assumption: if the user wants per-directory workspaces, the
   engine data layer changes.
+
+- **L16 (user request, verbatim):**
+  > Vale tiene buenaa pinta. Podemos pasar a desarrollar lo siguiente recuerda que tienes stackr como referencia
+- **L17 (decision):** the next slice is Port Forwards management, mirroring the
+  original runtime exactly: `kubectl port-forward --context <ctx> -n <ns>
+  service/<svc> <local>:<remote>`, `running` only after 2s, last 512 bytes of
+  stderr kept for failures, and a per profile+env handle registry so one engine
+  can serve every workspace. Adding is discovery driven and only the local port
+  is editable afterwards (same as the TUI). Local processes stay read-only in
+  this slice; they belong to the Docker/local-process work. Divergence: the
+  original has no "open in browser" action, so none was added.

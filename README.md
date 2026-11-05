@@ -13,7 +13,8 @@ two sections:
 - **Docker** — the environment named `local`: compose services, live status,
   logs and lifecycle actions.
 - **Port Forwards** — every other environment (`dev`, `staging`, …): Kubernetes
-  port-forwards and cloud workloads. Read-only in this slice.
+  port-forwards and cloud workloads. Forwards are discovered from kubeconfig and
+  managed with kubectl.
 
 ## Architecture
 
@@ -78,6 +79,15 @@ All routes require `Authorization: Bearer <token>`.
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
+| POST | `/api/profiles/{p}/envs/{e}/port-forwards` | add a port-forward |
+| PATCH | `/api/profiles/{p}/envs/{e}/port-forwards/{name}` | change its local port |
+| DELETE | `/api/profiles/{p}/envs/{e}/port-forwards/{name}` | stop and delete a port-forward |
+| POST | `/api/profiles/{p}/envs/{e}/port-forwards/{name}/actions/{start,stop}` | one forward |
+| POST | `/api/profiles/{p}/envs/{e}/port-forwards/actions/{start,stop}` | every forward in the environment |
+| GET | `/api/k8s/status` | kubectl availability |
+| GET | `/api/k8s/contexts` | kubeconfig contexts |
+| GET | `/api/k8s/namespaces?context=` | namespaces |
+| GET | `/api/k8s/services?context=&namespace=` | services with ports |
 | GET | `/api/hub/catalog` | curated catalog with default ports, env vars and volume target |
 | GET | `/api/hub/tags?image=&limit=` | recent Docker Hub tags for an image |
 | GET | `/api/hub/search?q=` | Docker Hub search |
@@ -89,7 +99,8 @@ All routes require `Authorization: Bearer <token>`.
 Implemented: workspace switcher (create/settings/delete), Docker and Port Forwards sections, Docker
 service status, lifecycle actions, live logs, curated catalog + Docker Hub
 search, add/edit/remove services with prefilled editable defaults (ports, env
-vars, volumes), shared config, engine lifecycle.
+vars, volumes), port-forward discovery + CRUD + start/stop with live state,
+shared config, engine lifecycle.
 
-Next slices: Kubernetes port-forward + resource manager (Port Forwards section), DB
+Next slices: Kubernetes resource manager (deployments), local processes, DB
 operations, queues, MockServer, request collections, git operations.

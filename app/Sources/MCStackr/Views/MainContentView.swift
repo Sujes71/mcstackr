@@ -8,10 +8,13 @@ struct MainContentView: View {
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
     @State private var pendingDelete: ServiceStatus?
+    @State private var showAddPortForward = false
+    @State private var editingForward: PortForwardInfo?
+    @State private var pendingDeleteForward: PortForwardInfo?
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(showAddService: $showAddService)
+            HeaderView(showAddService: $showAddService, showAddPortForward: $showAddPortForward)
             Divider().overlay(Theme.stroke)
             content
         }
@@ -28,6 +31,30 @@ struct MainContentView: View {
         .sheet(item: $editingService) { service in
             ServiceEditorView(service: service)
                 .environmentObject(state)
+        }
+        .sheet(isPresented: $showAddPortForward) {
+            AddPortForwardView()
+                .environmentObject(state)
+        }
+        .sheet(item: $editingForward) { forward in
+            PortForwardEditorView(forward: forward)
+                .environmentObject(state)
+        }
+        .confirmationDialog(
+            pendingDeleteForward.map { "Delete \($0.name)?" } ?? "Delete port-forward?",
+            isPresented: Binding(
+                get: { pendingDeleteForward != nil },
+                set: { if !$0 { pendingDeleteForward = nil } }
+            ),
+            presenting: pendingDeleteForward
+        ) { forward in
+            Button("Delete port-forward", role: .destructive) {
+                Task { await state.deletePortForward(named: forward.name) }
+                pendingDeleteForward = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteForward = nil }
+        } message: { forward in
+            Text("This stops the forward and removes it from \(state.workspaceName).")
         }
         .confirmationDialog(
             pendingDelete.map { "Delete \($0.name)?" } ?? "Delete service?",
@@ -52,7 +79,11 @@ struct MainContentView: View {
         if state.selectedProfile == nil {
             NoWorkspaceView()
         } else if state.section == .portForward {
-            PortForwardView()
+            PortForwardView(
+                onAdd: { showAddPortForward = true },
+                onEdit: { editingForward = $0 },
+                onDelete: { pendingDeleteForward = $0 }
+            )
         } else {
             dockerContent
         }
@@ -117,6 +148,7 @@ private struct LogTarget: Identifiable {
 private struct HeaderView: View {
     @EnvironmentObject private var state: AppState
     @Binding var showAddService: Bool
+    @Binding var showAddPortForward: Bool
 
     private var isDocker: Bool { state.section == .docker }
 
@@ -160,6 +192,8 @@ private struct HeaderView: View {
 
                 if isDocker {
                     dockerActions
+                } else {
+                    portForwardActions
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -196,6 +230,28 @@ private struct HeaderView: View {
         }
     }
 
+    @ViewBuilder
+    private var portForwardActions: some View {
+        if state.selectedProfile != nil, state.portForwardEnvironment != nil {
+            let forwards = state.environmentDetail?.portForwards ?? []
+            if !forwards.isEmpty {
+                if forwards.contains(where: \.isRunning) || forwards.contains(where: \.isBusy) {
+                    ActionTextButton(title: "Stop all", systemName: "stop.fill") {
+                        Task { await state.stopAllPortForwards() }
+                    }
+                } else {
+                    ActionTextButton(title: "Start all", systemName: "play.fill", prominent: true) {
+                        Task { await state.startAllPortForwards() }
+                    }
+                }
+            }
+
+            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add port-forward") {
+                showAddPortForward = true
+            }
+        }
+    }
+
     private var subtitle: String {
         guard let profile = state.selectedProfile else {
             return "Create a workspace to start defining your stack."
@@ -222,13 +278,16 @@ private struct HeaderView: View {
 
 private struct PortForwardView: View {
     @EnvironmentObject private var state: AppState
+    let onAdd: () -> Void
+    let onEdit: (PortForwardInfo) -> Void
+    let onDelete: (PortForwardInfo) -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let detail = state.environmentDetail {
                     if detail.portForwards.isEmpty {
-                        PortForwardEmptyView(environment: detail.name)
+                        PortForwardEmptyView(environment: detail.name, onAdd: onAdd)
                     } else {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("PORT-FORWARDS")
@@ -237,7 +296,19 @@ private struct PortForwardView: View {
                                 .foregroundStyle(Theme.textDim)
 
                             ForEach(detail.portForwards) { forward in
-                                PortForwardRow(forward: forward)
+                                PortForwardRow(
+                                    forward: forward,
+                                    isBusy: state.runningAction != nil,
+                                    onToggle: {
+                                        if forward.isRunning || forward.isBusy {
+                                            Task { await state.stopPortForward(forward) }
+                                        } else {
+                                            Task { await state.startPortForward(forward) }
+                                        }
+                                    },
+                                    onOpen: { onEdit(forward) },
+                                    onDelete: { onDelete(forward) }
+                                )
                             }
                         }
                     }
@@ -256,7 +327,7 @@ private struct PortForwardView: View {
                         }
                     }
                 } else if state.portForwardEnvironment == nil {
-                    PortForwardEmptyView(environment: nil)
+                    PortForwardEmptyView(environment: nil, onAdd: nil)
                 } else {
                     VStack(spacing: 14) {
                         ProgressView()
@@ -282,6 +353,7 @@ private struct PortForwardView: View {
 
 private struct PortForwardEmptyView: View {
     let environment: String?
+    let onAdd: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 16) {
@@ -295,11 +367,18 @@ private struct PortForwardEmptyView: View {
 
             Text(environment == nil
                  ? "This workspace has no environment besides Docker."
-                 : "Port-forwards and Kubernetes workloads for “\(environment!)” land in the next slice.")
+                 : "Discover a Kubernetes service and forward one of its ports to localhost.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(Theme.textMuted)
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
+
+            if let onAdd {
+                ActionTextButton(title: "Add port-forward", systemName: "plus", prominent: true) {
+                    onAdd()
+                }
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 70)
@@ -308,9 +387,24 @@ private struct PortForwardEmptyView: View {
 
 private struct PortForwardRow: View {
     let forward: PortForwardInfo
+    let isBusy: Bool
+    let onToggle: () -> Void
+    let onOpen: () -> Void
+    let onDelete: () -> Void
+
+    private var stateColor: Color {
+        switch forward.state.lowercased() {
+        case "running": return Theme.running
+        case "starting": return Theme.warning
+        case "failed": return Theme.danger
+        default: return Theme.textDim
+        }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
+            StatusDot(state: forward.state)
+
             Image(systemName: "network")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Theme.info)
@@ -318,13 +412,25 @@ private struct PortForwardRow: View {
                 .background(Theme.info.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(forward.name)
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Theme.text)
+                HStack(spacing: 7) {
+                    Text(forward.name)
+                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                    Text(forward.state.uppercased())
+                        .font(.system(size: 8, weight: .black, design: .rounded))
+                        .tracking(0.8)
+                        .foregroundStyle(stateColor)
+                }
                 Text("\(forward.k8sContext) · \(forward.k8sNamespace)/\(forward.k8sService)")
                     .font(Theme.monoSmall)
                     .foregroundStyle(Theme.textDim)
                     .lineLimit(1)
+                if let error = forward.error, !error.isEmpty {
+                    Text(error)
+                        .font(Theme.monoSmall)
+                        .foregroundStyle(Theme.danger)
+                        .lineLimit(2)
+                }
             }
 
             Spacer(minLength: 8)
@@ -332,9 +438,26 @@ private struct PortForwardRow: View {
             Text("\(forward.localPort) → \(forward.remotePort)")
                 .font(Theme.mono)
                 .foregroundStyle(Theme.textMuted)
+
+            ActionIconButton(
+                systemName: forward.isRunning || forward.isBusy ? "stop.fill" : "play.fill",
+                tint: forward.isRunning || forward.isBusy ? Theme.warning : Theme.running,
+                help: forward.isRunning || forward.isBusy ? "Stop" : "Start"
+            ) {
+                onToggle()
+            }
+            .disabled(isBusy)
         }
         .padding(13)
         .cardStyle()
+        .contentShape(Rectangle())
+        .onTapGesture { onOpen() }
+        .contextMenu {
+            Button(forward.isRunning || forward.isBusy ? "Stop" : "Start") { onToggle() }
+            Button("Edit local port…") { onOpen() }
+            Divider()
+            Button("Delete port-forward…", role: .destructive) { onDelete() }
+        }
     }
 }
 

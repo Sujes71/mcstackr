@@ -79,6 +79,8 @@ type portForwardDTO struct {
 	K8sContext   string `json:"k8sContext"`
 	K8sNamespace string `json:"k8sNamespace"`
 	K8sService   string `json:"k8sService"`
+	State        string `json:"state"`
+	Error        string `json:"error,omitempty"`
 }
 
 type localProcessDTO struct {
@@ -257,9 +259,14 @@ func toVolumeMappings(in []volumeDTO) []config.VolumeMapping {
 	return out
 }
 
-func toEnvironmentDetailDTO(e config.Environment) environmentDetailDTO {
+func toEnvironmentDetailDTO(e config.Environment, states map[string]pfRuntime) environmentDetailDTO {
 	forwards := make([]portForwardDTO, 0, len(e.PortForwards))
 	for _, pf := range e.PortForwards {
+		state := states[pf.Name]
+		stateName := state.State
+		if stateName == "" {
+			stateName = "stopped"
+		}
 		forwards = append(forwards, portForwardDTO{
 			Name:         pf.Name,
 			LocalPort:    pf.LocalPort,
@@ -267,6 +274,8 @@ func toEnvironmentDetailDTO(e config.Environment) environmentDetailDTO {
 			K8sContext:   pf.K8sContext,
 			K8sNamespace: pf.K8sNamespace,
 			K8sService:   pf.K8sService,
+			State:        stateName,
+			Error:        state.Error,
 		})
 	}
 	processes := make([]localProcessDTO, 0, len(e.LocalProcesses))
@@ -863,6 +872,8 @@ func (s *Server) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.pf.removeProfile(name)
+
 	// Best effort: bring containers down before the config disappears.
 	if docker.DaemonAvailable() {
 		for _, env := range profile.Environments {
@@ -905,7 +916,8 @@ func (s *Server) handleGetEnvironment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toEnvironmentDetailDTO(env))
+	s.pf.reconcile(profileName, envName, env.PortForwards)
+	writeJSON(w, http.StatusOK, toEnvironmentDetailDTO(env, s.pf.snapshot(profileName, envName)))
 }
 
 // ── Logs (SSE) ──────────────────────────────────────────────────────────────
