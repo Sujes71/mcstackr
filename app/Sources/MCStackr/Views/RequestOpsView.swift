@@ -99,6 +99,8 @@ struct RequestOpsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if let response, !response.envs.isEmpty {
+                    envSelector(response)
+
                     ForEach(folders, id: \.self) { folder in
                         folderTree(folder)
                     }
@@ -225,6 +227,82 @@ struct RequestOpsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+    }
+
+    /// The request environment in use. It is the context of everything below
+    /// it: the same look as the workspace selector and the same width, so
+    /// changing the environment moves nothing.
+    private func envSelector(_ payload: RequestsResponse) -> some View {
+        Menu {
+            ForEach(payload.envs) { env in
+                Button {
+                    state.selectedRequestEnv = env.name
+                } label: {
+                    if env.name == state.selectedRequestEnv {
+                        Label(env.name, systemImage: "checkmark")
+                    } else {
+                        Text(env.name)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                sheetTarget = .newEnv
+            } label: {
+                Label("New environment…", systemImage: "plus")
+            }
+
+            if !selectedEnv.isEmpty && selectedEnv != "local" {
+                Button {
+                    deleteTarget = .env(selectedEnv)
+                } label: {
+                    Label("Remove environment…", systemImage: "trash")
+                }
+            }
+        } label: {
+            HStack(spacing: 11) {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Theme.accent.opacity(0.18))
+                    .frame(width: 34, height: 34)
+                    .overlay {
+                        Image(systemName: "shippingbox")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                    }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(selectedEnv.isEmpty ? "No environment" : selectedEnv)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text("REQUEST ENVIRONMENT")
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.textDim)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.textDim)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 10)
+            // The same width whatever the name is, so changing the
+            // environment does not move anything.
+            .frame(width: 240, alignment: .leading)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Theme.stroke, lineWidth: 1)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .padding(.bottom, 6)
     }
 
     /// Adding a folder belongs to the folder level, so the affordance sits
