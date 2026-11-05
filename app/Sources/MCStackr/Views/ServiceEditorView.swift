@@ -158,10 +158,6 @@ struct ServiceEditorView: View {
         }
         let cleanEnvVars = envVars.filter { !$0.key.trimmingCharacters(in: .whitespaces).isEmpty }
         let cleanVolumes = volumes.filter { !$0.target.trimmingCharacters(in: .whitespaces).isEmpty }
-        if cleanVolumes.isEmpty && serviceNeedsVolume(trimmedImage) {
-            localError = "A volume is required: the data of a database lives in it."
-            return
-        }
 
         let saved = await state.updateService(
             named: service.name,

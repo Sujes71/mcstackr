@@ -124,12 +124,8 @@ struct ServiceConfigForm: View {
                                 .controlSize(.mini)
                                 .font(.system(size: 10, design: .rounded))
                                 .foregroundStyle(Theme.textMuted)
-                            // A service keeps at least one volume: the data of
-                            // a database lives in it.
-                            if volumes.count > 1 {
-                                ActionIconButton(systemName: "minus.circle", tint: Theme.danger, help: "Remove volume") {
-                                    volumes.remove(at: index)
-                                }
+                            ActionIconButton(systemName: "minus.circle", tint: Theme.danger, help: "Remove volume") {
+                                volumes.remove(at: index)
                             }
                         }
                     }
@@ -161,20 +157,6 @@ struct ServiceConfigForm: View {
         let upper = key.uppercased()
         return ["PASSWORD", "SECRET", "TOKEN", "API_KEY", "PRIVATE"].contains { upper.contains($0) }
     }
-}
-
-/// The database kinds that keep their data in a volume. They always need at
-/// least one, so the last volume cannot be removed.
-func serviceNeedsVolume(_ image: String) -> Bool {
-    let base = image.lowercased()
-    let kinds = [
-        "postgres", "postgis", "cockroach",
-        "mysql", "mariadb",
-        "mongo",
-        "oracle",
-        "mssql", "sqlserver", "azuresql",
-    ]
-    return kinds.contains { base.contains($0) }
 }
 
 func isValidServiceName(_ value: String) -> Bool {

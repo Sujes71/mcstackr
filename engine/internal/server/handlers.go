@@ -243,21 +243,6 @@ func toServiceConfigDTO(s config.Service) serviceConfigDTO {
 	}
 }
 
-// requireVolume keeps a database service with at least one volume. The data
-// directory of a database lives in a volume: without it the container writes
-// to an ephemeral path and the data is lost on every recreate.
-func requireVolume(svc config.Service) error {
-	if svc.DBType() == "" {
-		return nil
-	}
-	for _, v := range svc.Volumes {
-		if strings.TrimSpace(v.Target) != "" {
-			return nil
-		}
-	}
-	return fmt.Errorf("service %q needs at least one volume: the data of a %s lives in a volume", svc.Name, svc.DBType())
-}
-
 func toVolumeMappings(in []volumeDTO) []config.VolumeMapping {
 	if in == nil {
 		return nil
@@ -695,10 +680,6 @@ func (s *Server) handleAddService(w http.ResponseWriter, r *http.Request) {
 		svc.EnvVars = append(svc.EnvVars, config.EnvVar{Key: key, Value: e.Value})
 	}
 	svc.Volumes = toVolumeMappings(req.Volumes)
-	if err := requireVolume(svc); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 
 	var updated config.Profile
 	err := s.store.Update(func(c *config.Config) error {
@@ -881,10 +862,6 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 	}
 	svc.Volumes = toVolumeMappings(req.Volumes)
 	svc.Name = serviceName
-	if err := requireVolume(svc); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
 
 	var updated config.Profile
 	err := s.store.Update(func(c *config.Config) error {

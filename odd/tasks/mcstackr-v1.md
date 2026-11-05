@@ -141,14 +141,6 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   as a popover anchored to the control that opened it, with its buttons
   stacked vertically, which does not match the app's windows and reads as a
   different application.
-- **S52** — A database keeps its data in a volume, so a service always keeps
-  at least one: the option to remove the last volume is not offered, and a
-  save that would leave a database without a volume is refused with a clear
-  message. The engine applies the same rule, so the config cannot end up with
-  a database that empties itself on the next `down` / `up`. The rule is
-  verified, not assumed: with a volume the data survives the cycle, without
-  it the database comes back empty. Services that are not databases (mock
-  servers, queues) are not required to have one.
 - **S51** — The criterion to import is the same for every database type: an
   import needs a dump of that kind for the sync environment, and the local
   container running, because the import restores into it. Postgres needs a
@@ -287,17 +279,6 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
-- [x] T52 — A service keeps at least one volume: the remove button on a
-  volume row is hidden when it is the last one, the editor and the add flow
-  refuse to save a database without a volume, and the engine rejects it with
-  `service "mongo" needs at least one volume: the data of a mongo lives in a
-  volume`. Evidence: on an isolated profile, two mongo services were started
-  (one with a volume, one without), a document was inserted in both, and the
-  environment was brought down and up again: the service without a volume came
-  back with 0 documents and the one with a volume kept its 1; the engine
-  rejects a database service with no volume or with a volume without target
-  (400) and leaves the stored config untouched; `go build`/`go vet`/`swift
-  build` clean.
 - [x] T51 — Import criterion per database type, audited end to end: the export
   name and the import pattern of every type were paired and checked (postgres
   `schema-*.sql` / `data-*.sql`, mongo directory, mysql `data-*.sql`, mssql
