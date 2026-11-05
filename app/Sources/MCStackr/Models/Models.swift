@@ -227,7 +227,9 @@ struct DBSyncEnv: Codable, Identifiable, Hashable {
     let dbType: String
     let host: String
     let port: String
+    let user: String
     let database: String
+    let authDb: String?
     let toolImage: String
     let actions: [DBAction]
     let dumps: [DBDump]
@@ -266,6 +268,19 @@ struct DBJob: Codable {
 
 struct DBJobRequest: Codable {
     let syncEnv: String
+}
+
+/// Payload for creating or updating a sync environment. A nil password keeps
+/// the stored one on update; an empty string clears it.
+struct SyncEnvDraft: Encodable {
+    var name: String
+    var host: String
+    var port: String
+    var user: String
+    var password: String?
+    var database: String
+    var authDb: String
+    var toolImage: String
 }
 
 enum AppSection: String, CaseIterable, Identifiable {

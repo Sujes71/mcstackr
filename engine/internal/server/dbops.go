@@ -31,7 +31,9 @@ type dbSyncEnvDTO struct {
 	DBType    string        `json:"dbType"`
 	Host      string        `json:"host"`
 	Port      string        `json:"port"`
+	User      string        `json:"user"`
 	Database  string        `json:"database"`
+	AuthDB    string        `json:"authDb,omitempty"`
 	ToolImage string        `json:"toolImage"`
 	Actions   []dbActionDTO `json:"actions"`
 	Dumps     []dbDumpDTO   `json:"dumps"`
@@ -212,7 +214,9 @@ func (s *Server) dbOpsInfo(profileName, envName, serviceName string) (dbOpsInfoR
 			DBType:    se.DBType,
 			Host:      se.Host,
 			Port:      se.Port,
+			User:      se.User,
 			Database:  se.Database,
+			AuthDB:    se.AuthDB,
 			ToolImage: docker.ToolImage(&se),
 			Actions:   dbActions(dbType, daemon, running, dumps),
 			Dumps:     dumps,

@@ -62,6 +62,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}/dbops", s.handleDBOpsInfo)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/dbops/{action}", s.handleDBOp)
 	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}/dbops/jobs/{id}", s.handleDBJob)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/sync-envs", s.handleCreateSyncEnv)
+	s.mux.HandleFunc("PATCH /api/profiles/{profile}/envs/{env}/services/{service}/sync-envs/{syncenv}", s.handleUpdateSyncEnv)
+	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/services/{service}/sync-envs/{syncenv}", s.handleDeleteSyncEnv)
 
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/local-processes", s.handleAddLocalProcess)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/local-processes/{name}", s.handleDeleteLocalProcess)

@@ -12,8 +12,34 @@ struct DBOpsView: View {
     @State private var selectedEnv: String = ""
     @State private var job: DBJob?
     @State private var jobLabel: String = ""
-    @State private var pendingAction: DBAction?
+    @State private var confirm: Confirm?
+    @State private var syncEnvTarget: SyncEnvTarget?
     @State private var errorText: String?
+
+    private struct SyncEnvTarget: Identifiable {
+        let env: DBSyncEnv?
+
+        var id: String { env?.name ?? "__new" }
+    }
+
+    private enum Confirm: Identifiable {
+        case action(DBAction)
+        case deleteEnv(DBSyncEnv)
+
+        var id: String {
+            switch self {
+            case .action(let action): return "action-\(action.id)"
+            case .deleteEnv(let env): return "delete-\(env.name)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .action(let action): return action.label
+            case .deleteEnv(let env): return "Delete sync environment “\(env.name)”?"
+            }
+        }
+    }
 
     private var syncEnv: DBSyncEnv? {
         info?.syncEnvs.first { $0.name == selectedEnv }
@@ -29,11 +55,7 @@ struct DBOpsView: View {
             Divider().overlay(Theme.stroke)
 
             if let info {
-                if info.syncEnvs.isEmpty {
-                    emptyState
-                } else {
-                    body(info)
-                }
+                body(info)
             } else {
                 loading
             }
@@ -44,23 +66,42 @@ struct DBOpsView: View {
         .frame(width: 660, height: 680)
         .background(Theme.background)
         .task { await reload(selectFirst: true) }
+        .sheet(item: $syncEnvTarget) { target in
+            SyncEnvWizard(
+                service: service,
+                dbType: info?.dbType ?? "",
+                existing: target.env
+            ) { updated, savedName in
+                info = updated
+                selectedEnv = savedName
+            }
+            .environmentObject(state)
+        }
         .confirmationDialog(
-            pendingAction?.label ?? "",
+            confirm?.title ?? "",
             isPresented: Binding(
-                get: { pendingAction != nil },
-                set: { if !$0 { pendingAction = nil } }
+                get: { confirm != nil },
+                set: { if !$0 { confirm = nil } }
             ),
             titleVisibility: .visible
         ) {
-            if let action = pendingAction {
-                Button(action.label, role: .destructive) {
-                    pendingAction = nil
-                    run(action)
+            if let confirm {
+                switch confirm {
+                case .action(let action):
+                    Button(action.label, role: .destructive) {
+                        self.confirm = nil
+                        run(action)
+                    }
+                case .deleteEnv(let env):
+                    Button("Delete", role: .destructive) {
+                        self.confirm = nil
+                        Task { await deleteEnv(env) }
+                    }
                 }
-                Button("Cancel", role: .cancel) { pendingAction = nil }
+                Button("Cancel", role: .cancel) { self.confirm = nil }
             }
         } message: {
-            Text(confirmationMessage(for: pendingAction))
+            Text(confirmationMessage(for: confirm))
         }
     }
 
@@ -127,17 +168,22 @@ struct DBOpsView: View {
             Image(systemName: "cylinder.split.1x2")
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Theme.textDim)
-            Text("No sync environments")
+            Text("No sync environments yet")
                 .font(Theme.title(17))
                 .foregroundStyle(Theme.text)
-            Text("Add sync_envs to this service in ~/.stackr/config.yaml to export from or import into a remote database.")
+            Text("Add the connection details of a remote \(info?.dbType ?? "database") to export from it or import into it.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(Theme.textMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
+
+            ActionTextButton(title: "Add sync environment", systemName: "plus", prominent: true) {
+                syncEnvTarget = SyncEnvTarget(env: nil)
+            }
+            .padding(.top, 4)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
     }
 
     // MARK: Body
@@ -147,7 +193,11 @@ struct DBOpsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 targetPicker(info)
 
-                if !info.running {
+                if info.syncEnvs.isEmpty {
+                    emptyState
+                }
+
+                if !info.running && !info.syncEnvs.isEmpty {
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 11, weight: .semibold))
@@ -194,6 +244,19 @@ struct DBOpsView: View {
                         .font(Theme.monoSmall)
                         .foregroundStyle(Theme.textMuted)
                         .lineLimit(1)
+                }
+
+                ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add sync environment") {
+                    syncEnvTarget = SyncEnvTarget(env: nil)
+                }
+
+                if let env = syncEnv {
+                    ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit sync environment") {
+                        syncEnvTarget = SyncEnvTarget(env: env)
+                    }
+                    ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete sync environment") {
+                        confirm = .deleteEnv(env)
+                    }
                 }
             }
 
@@ -385,7 +448,7 @@ struct DBOpsView: View {
         guard let env = syncEnv else { return }
         errorText = nil
         if action.destructive == true {
-            pendingAction = action
+            confirm = .action(action)
             return
         }
         run(action, env: env)
@@ -439,8 +502,27 @@ struct DBOpsView: View {
         }
     }
 
-    private func confirmationMessage(for action: DBAction?) -> String {
-        switch action?.id {
+    private func deleteEnv(_ env: DBSyncEnv) async {
+        guard let updated = await state.deleteSyncEnv(service: service.name, name: env.name) else {
+            errorText = state.errorMessage ?? "Could not delete the sync environment."
+            return
+        }
+        info = updated
+        selectedEnv = updated.syncEnvs.first?.name ?? ""
+    }
+
+    private func confirmationMessage(for confirm: Confirm?) -> String {
+        guard let confirm else { return "" }
+        switch confirm {
+        case .deleteEnv(let env):
+            return "This removes “\(env.name)” from the config. Its dumps stay on disk."
+        case .action(let action):
+            return actionMessage(for: action)
+        }
+    }
+
+    private func actionMessage(for action: DBAction) -> String {
+        switch action.id {
         case "import-schema":
             return "This drops every schema in \(service.name) and re-applies the latest schema dump."
         case "import-data":

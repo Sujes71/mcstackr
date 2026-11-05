@@ -720,6 +720,32 @@ final class AppState: ObservableObject {
         }
     }
 
+    func saveSyncEnv(service: String, originalName: String?, draft: SyncEnvDraft) async -> DBOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        let base = "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/sync-envs"
+        do {
+            if let originalName {
+                return try await client.patch("\(base)/\(originalName.pathComponentEncoded)", body: draft)
+            }
+            return try await client.post(base, body: draft)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteSyncEnv(service: String, name: String) async -> DBOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/sync-envs/\(name.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     func deleteLocalProcess(named name: String) async -> Bool {
         guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return false }
         var success = false
