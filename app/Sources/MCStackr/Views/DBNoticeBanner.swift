@@ -7,10 +7,8 @@ struct DBNoticeBanner: View {
     @EnvironmentObject private var state: AppState
 
     var body: some View {
-        VStack(spacing: 8) {
-            ForEach(state.dbNotices) { notice in
-                noticeCard(notice)
-            }
+        if let notice = state.dbNotice {
+            noticeCard(notice)
         }
     }
 
@@ -51,7 +49,7 @@ struct DBNoticeBanner: View {
                 Spacer(minLength: 8)
 
                 Button {
-                    state.dismissDBNotice(notice.id)
+                    state.dismissDBNotice()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .bold))
@@ -70,5 +68,15 @@ struct DBNoticeBanner: View {
             .padding(.horizontal, 18)
             .frame(maxWidth: 520)
             .transition(.move(edge: .top).combined(with: .opacity))
+            .task(id: notice.id) {
+                // A success can be read at a glance; an error needs more time.
+                let seconds: UInt64 = notice.succeeded ? 8 : 16
+                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                if state.dbNotice?.id == notice.id {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        state.dismissDBNotice()
+                    }
+                }
+            }
     }
 }

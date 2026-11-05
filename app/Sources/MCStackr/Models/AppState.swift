@@ -29,9 +29,10 @@ final class AppState: ObservableObject {
     /// DB operations started from the app. They live in the engine, so they
     /// keep running when the sheet is closed and the user works elsewhere.
     @Published private(set) var dbJobs: [DBJob] = []
-    /// Finished operations, surfaced as notices. They stay until the user
-    /// dismisses them, so a result is never missed.
-    @Published private(set) var dbNotices: [DBJobNotice] = []
+    /// The last finished operation. Only one notice is shown at a time: the
+    /// next one replaces it. The full history lives in the DB operations
+    /// sheet, which lists every operation of the service.
+    @Published private(set) var dbNotice: DBJobNotice?
     /// Bumped every time an operation finishes, so open sheets can refresh.
     @Published private(set) var dbFinishedCount = 0 {
         didSet {
@@ -791,7 +792,7 @@ final class AppState: ObservableObject {
             dbJobs[index] = latest
             if !latest.isRunning {
                 dbFinishedCount += 1
-                let notice = DBJobNotice(
+                dbNotice = DBJobNotice(
                     id: latest.id,
                     service: service,
                     label: latest.label ?? "Operation",
@@ -799,15 +800,12 @@ final class AppState: ObservableObject {
                     succeeded: latest.isDone,
                     detail: latest.error ?? latest.output ?? ""
                 )
-                dbNotices.removeAll { $0.id == notice.id }
-                dbNotices.insert(notice, at: 0)
-                if dbNotices.count > 3 { dbNotices.removeLast() }
             }
         }
     }
 
-    func dismissDBNotice(_ id: String) {
-        dbNotices.removeAll { $0.id == id }
+    func dismissDBNotice() {
+        dbNotice = nil
     }
 
     func fetchDBJob(profile: String?, env: String?, service: String, id: String) async -> DBJob? {

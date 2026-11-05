@@ -39,7 +39,7 @@ struct RootView: View {
                 DBNoticeBanner()
             }
         }
-        .animation(.easeOut(duration: 0.2), value: state.dbNotices.map(\.id))
+        .animation(.easeOut(duration: 0.2), value: state.dbNotice?.id)
     }
 }
 

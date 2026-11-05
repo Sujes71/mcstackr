@@ -147,9 +147,11 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   registry of every operation it started, polls it, and never locks the UI:
   the action rows stay usable, so two exports can run in parallel. When an
   operation finishes, a notice appears in the main window with the result —
-  success or failure — and it stays there until the user dismisses it, so a
-  result is never missed. The DB operations sheet shows the history of
-  operations of that service, newest first, with their state and output.
+  success or failure. Only the last notice is shown: the next one replaces
+  it, and it hides itself after a few seconds (longer for a failure, whose
+  text has to be read). The durable history lives in the DB operations sheet,
+  which lists the operations of that service, newest first, with their state
+  and the time they happened.
 - **S50** — Editing a sync environment never touches what it does not own.
   Saving the connection details keeps the custom actions of that sync
   environment, and renaming it moves its dump folder to the new name, so the
