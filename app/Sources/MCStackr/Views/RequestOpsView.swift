@@ -246,21 +246,6 @@ struct RequestOpsView: View {
                 }
             }
 
-            Divider()
-
-            Button {
-                sheetTarget = .newEnv
-            } label: {
-                Label("New environment…", systemImage: "plus")
-            }
-
-            if !selectedEnv.isEmpty && selectedEnv != "local" {
-                Button {
-                    deleteTarget = .env(selectedEnv)
-                } label: {
-                    Label("Remove environment…", systemImage: "trash")
-                }
-            }
         } label: {
             HStack(spacing: 11) {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)

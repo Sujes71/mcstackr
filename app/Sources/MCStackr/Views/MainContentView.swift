@@ -288,6 +288,12 @@ private struct HeaderView: View {
         if state.selectedProfile != nil {
             // Removing an environment belongs to the header, next to the
             // button that adds one. The local environment cannot be removed.
+            // Like the other sections, the button appears and disappears.
+            if !state.selectedRequestEnv.isEmpty && state.selectedRequestEnv != "local" {
+                ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Remove the \(state.selectedRequestEnv) environment") {
+                    state.pendingSectionAction = .deleteRequestEnv
+                }
+            }
 
             ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add request environment") {
                 state.pendingSectionAction = .addRequestEnv
