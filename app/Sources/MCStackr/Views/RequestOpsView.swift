@@ -130,7 +130,8 @@ struct RequestOpsView: View {
             state.pendingSectionAction = nil
             switch action {
             case .addRequest:
-                sheetTarget = .request(folder: folders.first ?? "", request: nil)
+                guard let folder = folders.first else { return }
+                sheetTarget = .request(folder: folder, request: nil)
             case .addRequestFolder:
                 sheetTarget = .folder(folder: nil, url: "")
             case .addRequestEnv:
