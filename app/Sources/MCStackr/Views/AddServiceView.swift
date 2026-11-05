@@ -9,6 +9,20 @@ struct AddServiceView: View {
         case configure
     }
 
+    private enum Mode: String, CaseIterable, Identifiable {
+        case service
+        case process
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .service: return "Service"
+            case .process: return "Local process"
+            }
+        }
+    }
+
     private enum Source: String, CaseIterable, Identifiable {
         case catalog
         case search
@@ -25,6 +39,7 @@ struct AddServiceView: View {
         }
     }
 
+    @State private var mode: Mode = .service
     @State private var step: Step = .choose
     @State private var source: Source = .catalog
 
@@ -46,6 +61,10 @@ struct AddServiceView: View {
     @State private var tagsImage = ""
     @State private var isLoadingTags = false
 
+    @State private var procName = ""
+    @State private var procCommand = ""
+    @State private var procWorkDir = ""
+
     @State private var isSaving = false
     @State private var localError: String?
 
@@ -54,7 +73,9 @@ struct AddServiceView: View {
             header
             Divider().overlay(Theme.stroke)
 
-            if step == .choose {
+            if mode == .process {
+                processStep
+            } else if step == .choose {
                 chooseStep
             } else {
                 configureStep
@@ -71,23 +92,35 @@ struct AddServiceView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
-                    Text(step == .choose ? "Add service" : "Configure service")
+                    Text(headerTitle)
                         .font(Theme.display(22))
                         .foregroundStyle(Theme.text)
-                    if step == .configure, !image.isEmpty {
+                    if mode == .service, step == .configure, !image.isEmpty {
                         TechBadge(text: image, color: Theme.info)
                     }
                 }
-                Text(step == .choose
-                     ? "Pick an image first. Defaults depend on what you pick."
-                     : "\(state.workspaceName) / Docker")
+                Text(headerSubtitle)
                     .font(.system(size: 11.5, design: .rounded))
                     .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
+
+                Picker("Type", selection: $mode) {
+                    ForEach(Mode.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 260)
+                .padding(.top, 8)
+                .onChange(of: mode) { _, _ in
+                    localError = nil
+                }
             }
 
             Spacer()
 
-            if step == .configure {
+            if mode == .service, step == .configure {
                 ActionIconButton(systemName: "chevron.left", tint: Theme.textMuted, help: "Change image") {
                     step = .choose
                 }
@@ -99,6 +132,22 @@ struct AddServiceView: View {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 18)
+    }
+
+    private var headerTitle: String {
+        switch mode {
+        case .process: return "Run a command"
+        case .service: return step == .choose ? "Add service" : "Configure service"
+        }
+    }
+
+    private var headerSubtitle: String {
+        switch mode {
+        case .process: return "\(state.workspaceName) / Docker · Host process, not a container"
+        case .service: return step == .choose
+            ? "Pick an image first. Defaults depend on what you pick."
+            : "\(state.workspaceName) / Docker"
+        }
     }
 
     // MARK: - Step 1: choose image
@@ -365,9 +414,61 @@ struct AddServiceView: View {
 
     // MARK: - Footer
 
+    // MARK: - Local process
+
+    private var processStep: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                if let localError {
+                    Text(localError)
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(Theme.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.danger.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+
+                FormSection("Process") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        FieldLabel(text: "Name")
+                        ThemedTextField(placeholder: "e.g. api", text: $procName)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        FieldLabel(text: "Command")
+                        ThemedTextField(placeholder: "npm run dev", text: $procCommand)
+                        Text("Runs through sh -c, so pipes, redirects and shell syntax work.")
+                            .font(.system(size: 10.5, design: .rounded))
+                            .foregroundStyle(Theme.textDim)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        FieldLabel(text: "Working directory")
+                        ThemedTextField(placeholder: "~/Projects/my-app", text: $procWorkDir)
+                        Text("Optional. Supports a leading ~. Defaults to the app working directory.")
+                            .font(.system(size: 10.5, design: .rounded))
+                            .foregroundStyle(Theme.textDim)
+                    }
+                }
+
+                Text("The process starts and stops with this workspace and keeps running while the app is open.")
+                    .font(.system(size: 10.5, design: .rounded))
+                    .foregroundStyle(Theme.textDim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(22)
+        }
+        .scrollIndicators(.hidden)
+    }
+
     private var footer: some View {
         HStack(spacing: 10) {
-            if step == .configure {
+            if mode == .process {
+                Text("A local process runs on your Mac, not in Docker.")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundStyle(Theme.textDim)
+            } else if step == .configure {
                 Text("Defaults come from the curated catalog; everything is editable.")
                     .font(.system(size: 10, design: .rounded))
                     .foregroundStyle(Theme.textDim)
@@ -375,7 +476,17 @@ struct AddServiceView: View {
 
             Spacer()
 
-            if step == .configure {
+            if mode == .process {
+                ActionTextButton(
+                    title: isSaving ? "Adding…" : "Add process",
+                    systemName: "plus",
+                    prominent: true
+                ) {
+                    Task { await saveProcess() }
+                }
+                .disabled(isSaving || !canSaveProcess)
+                .opacity(isSaving || !canSaveProcess ? 0.5 : 1)
+            } else if step == .configure {
                 ActionTextButton(
                     title: isSaving ? "Adding…" : "Add service",
                     systemName: "plus",
@@ -395,6 +506,29 @@ struct AddServiceView: View {
 
     private var canSave: Bool {
         isValidServiceName(name) && !image.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var canSaveProcess: Bool {
+        !procName.trimmingCharacters(in: .whitespaces).isEmpty
+            && !procCommand.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func saveProcess() async {
+        guard canSaveProcess else { return }
+        localError = nil
+        isSaving = true
+        defer { isSaving = false }
+
+        let added = await state.addLocalProcess(
+            name: procName.trimmingCharacters(in: .whitespaces),
+            command: procCommand.trimmingCharacters(in: .whitespaces),
+            workDir: procWorkDir.trimmingCharacters(in: .whitespaces)
+        )
+        if added {
+            dismiss()
+        } else {
+            localError = state.errorMessage
+        }
     }
 
     private func choose(image imageName: String, tag tagName: String, entry: CatalogEntry?) {

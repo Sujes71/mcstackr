@@ -107,11 +107,18 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
 - **S35** — The Port Forwards header mirrors Docker: a `LIVE` badge when at
   least one forward is running and a `"N port-forwards · X running"` subtitle.
 - **S36** — Local processes belong to the Docker section: they are listed with
-  state, PID, command and workdir, can be started/stopped, deleted through the
-  standard destructive confirmation, and added with **Run a command** (name,
-  command, optional workdir). The name is sanitized and must be unique against
-  services and other local processes; the command is required. Commands run
-  through `sh -c`, so shell syntax works.
+  state, PID, command and workdir, can be started/stopped and deleted through
+  the standard destructive confirmation. The name is sanitized and must be
+  unique against services and other local processes; the command is required.
+  Commands run through `sh -c`, so shell syntax works.
+- **S39** — One add entry point: the header `+` (and the empty-state button)
+  opens a single sheet with a **Service / Local process** switch. There is no
+  separate add-process button and no second terminal icon. Local processes use
+  the same name, command (via `sh -c`) and optional workdir fields.
+- **S40** — Sidebar badges show only what is running: Docker shows the number
+  of running services plus local processes, Port Forwards the number of running
+  forwards, and nothing at all when the count is zero. The leftover `SOON`
+  label is gone.
 - **S37** — Each local process runs in its own process group and writes
   `~/.stackr/<profile>/<env>/procs/<name>.pid`. A restarted engine adopts
   processes that are still alive, detects exits on its own, waits up to five
@@ -162,7 +169,9 @@ MockServer, request collections, git operations.
 - [x] T36 — Swift: dropped the global Restart all; Port Forwards header shows the LIVE badge and running count. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
 - [x] T37 — Engine: `localprocess` runtime (process group, PID file, orphan adoption, exit detection, 5s stop) and a per profile+env manager wired into shutdown. Evidence: start/stop/add/delete 201/400/400/400/204; killed process flips to stopped; adopted PID survives an engine SIGKILL and is stopped afterwards; 0 leftovers.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
-- [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, **Run a command** sheet, empty-state entry point, header terminal action, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
+- [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
+- [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T41 — Swift: sidebar badges are running-only (services + local processes, forwards) and the `SOON` label is removed. Evidence: `swift build` passes.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
 
@@ -256,6 +265,14 @@ MockServer, request collections, git operations.
   > una vez ajustes eso pasa a lo siguiente
 - **L19 (user constraint, verbatim):**
   > te corte porque veo que esstas orobando creo cosas contra aws pero sin la vpn n funciona asi que no pierdas el tiempo probando eso
+- **L21 (user request, verbatim):**
+  > en docker veo el boton add process abajo y luego arriba el icono de una consola que hace lo mismo yo lo que haria seria uitar ambos bnotones y que el + que actualmente te crea un servicio deberia manehjar ambos casos al darle esta en add service pero deberia haber un boton que me cambie entre add service y add process
+  >
+  > en el nav de la izquierda donde esta docker y port forward en docker no veo nada de cuantos hay creado a la derecha y en el otro si decidete o me lo muestras en todos o no me lo muestras. lo ideal es uqe no aparezca nada y solo aparezcan cuando esten running creo
+- **L22 (decision):** both notes applied. The add sheet is now one flow with a
+  segmented Service / Local process switch in its header; the section button,
+  the header terminal icon and the standalone process sheet are gone. Sidebar
+  badges show only running counts and disappear at zero, in both sections.
 - **L20 (decision):** the header alignment shipped first (no global Restart
   all, LIVE badge + running count in Port Forwards). The next slice is local
   processes, not the Kubernetes manager: local processes are fully verifiable

@@ -144,8 +144,16 @@ struct SidebarView: View {
 
     private var nav: some View {
         VStack(spacing: 3) {
-            sectionRow(.docker, badge: state.runningCount > 0 ? "\(state.runningCount)" : nil)
-            sectionRow(.portForward, badge: state.portForwardCount > 0 ? "\(state.portForwardCount)" : nil)
+            sectionRow(
+                .docker,
+                badge: state.runningCount + state.runningLocalProcessCount > 0
+                    ? "\(state.runningCount + state.runningLocalProcessCount)"
+                    : nil
+            )
+            sectionRow(
+                .portForward,
+                badge: state.runningForwardCount > 0 ? "\(state.runningForwardCount)" : nil
+            )
         }
     }
 
@@ -173,14 +181,6 @@ struct SidebarView: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(selected ? Theme.accent : Theme.field, in: Capsule())
-                } else if section == .portForward {
-                    Text("SOON")
-                        .font(.system(size: 7.5, weight: .bold, design: .rounded))
-                        .tracking(0.8)
-                        .foregroundStyle(Theme.textDim)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Theme.field, in: Capsule())
                 }
             }
             .padding(.horizontal, 10)

@@ -5,7 +5,6 @@ struct MainContentView: View {
     @EnvironmentObject private var state: AppState
 
     @State private var showAddService = false
-    @State private var showAddLocalProcess = false
     @State private var pendingDeleteProcess: LocalProcessInfo?
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
@@ -16,11 +15,7 @@ struct MainContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(
-                showAddService: $showAddService,
-                showAddLocalProcess: $showAddLocalProcess,
-                showAddPortForward: $showAddPortForward
-            )
+            HeaderView(showAddService: $showAddService, showAddPortForward: $showAddPortForward)
             Divider().overlay(Theme.stroke)
             content
         }
@@ -36,10 +31,6 @@ struct MainContentView: View {
         }
         .sheet(item: $editingService) { service in
             ServiceEditorView(service: service)
-                .environmentObject(state)
-        }
-        .sheet(isPresented: $showAddLocalProcess) {
-            AddLocalProcessView()
                 .environmentObject(state)
         }
         .sheet(isPresented: $showAddPortForward) {
@@ -118,10 +109,7 @@ struct MainContentView: View {
     @ViewBuilder
     private var dockerContent: some View {
         if let env = state.dockerEnvironment, env.serviceCount == 0, state.localProcesses.isEmpty {
-            EmptyDockerView(
-                onAddService: { showAddService = true },
-                onAddProcess: { showAddLocalProcess = true }
-            )
+            EmptyDockerView(onAddService: { showAddService = true })
         } else if state.services.isEmpty && state.dockerDetail == nil {
             VStack(spacing: 14) {
                 ProgressView()
@@ -173,18 +161,10 @@ struct MainContentView: View {
 
     private var localProcessesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("LOCAL PROCESSES")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .tracking(1.1)
-                    .foregroundStyle(Theme.textDim)
-
-                Spacer()
-
-                ActionTextButton(title: "Add process", systemName: "plus") {
-                    showAddLocalProcess = true
-                }
-            }
+            Text("LOCAL PROCESSES")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .tracking(1.1)
+                .foregroundStyle(Theme.textDim)
 
             ForEach(state.localProcesses) { process in
                 LocalProcessRow(
@@ -215,13 +195,14 @@ private struct LogTarget: Identifiable {
 private struct HeaderView: View {
     @EnvironmentObject private var state: AppState
     @Binding var showAddService: Bool
-    @Binding var showAddLocalProcess: Bool
     @Binding var showAddPortForward: Bool
 
     private var isDocker: Bool { state.section == .docker }
 
     private var hasLive: Bool {
-        isDocker ? state.hasRunningServices : state.runningForwardCount > 0
+        isDocker
+            ? state.hasRunningServices || state.runningLocalProcessCount > 0
+            : state.runningForwardCount > 0
     }
 
     var body: some View {
@@ -278,31 +259,24 @@ private struct HeaderView: View {
 
     @ViewBuilder
     private var dockerActions: some View {
-        if state.selectedProfile != nil, let env = state.dockerEnvironment, env.serviceCount > 0 {
-            if state.runningCount > 0 {
+        if state.selectedProfile != nil, let env = state.dockerEnvironment {
+            let hasItems = env.serviceCount > 0 || !state.localProcesses.isEmpty
+            let anythingRunning = state.runningCount + state.runningLocalProcessCount > 0
+
+            if anythingRunning {
                 ActionTextButton(title: "Stop all", systemName: "stop.fill") {
                     Task { await state.performEnvAction("stop") }
                 }
-            } else {
+            } else if hasItems {
                 ActionTextButton(title: "Start all", systemName: "play.fill", prominent: true) {
                     Task { await state.performEnvAction("up") }
                 }
             }
 
-            ActionIconButton(systemName: "terminal", tint: Theme.info, help: "Add local process") {
-                showAddLocalProcess = true
-            }
-
-            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add service") {
-                showAddService = true
-            }
-        } else if state.selectedProfile != nil {
-            ActionTextButton(title: "Add service", systemName: "plus", prominent: true) {
-                showAddService = true
-            }
-
-            ActionIconButton(systemName: "terminal", tint: Theme.info, help: "Add local process") {
-                showAddLocalProcess = true
+            if hasItems {
+                ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add service or local process") {
+                    showAddService = true
+                }
             }
         }
     }
@@ -337,10 +311,18 @@ private struct HeaderView: View {
         switch state.section {
         case .docker:
             let total = profile.environments.reduce(0) { $0 + $1.serviceCount }
-            if let description = profile.description, !description.isEmpty {
-                return "\(description) · \(total) services · \(state.runningCount) running"
+            let processes = state.localProcesses.count
+            let running = state.runningCount + state.runningLocalProcessCount
+            var parts = ["\(total) services"]
+            if processes > 0 {
+                parts.append("\(processes) processes")
             }
-            return "\(total) services · \(state.runningCount) running"
+            parts.append("\(running) running")
+            let summary = parts.joined(separator: " · ")
+            if let description = profile.description, !description.isEmpty {
+                return "\(description) · \(summary)"
+            }
+            return summary
         case .portForward:
             let forwards = state.portForwardCount
             let running = state.runningForwardCount
@@ -585,7 +567,6 @@ private struct NoWorkspaceView: View {
 
 private struct EmptyDockerView: View {
     let onAddService: () -> Void
-    let onAddProcess: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
@@ -597,15 +578,12 @@ private struct EmptyDockerView: View {
                 .font(Theme.title(18))
                 .foregroundStyle(Theme.text)
 
-            Text("Add a service to this workspace, or run a command on your Mac.")
+            Text("Add a compose service or a host command to this workspace.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(Theme.textMuted)
 
-            HStack(spacing: 10) {
-                ActionTextButton(title: "Add service", systemName: "plus", prominent: true, action: onAddService)
-                ActionTextButton(title: "Run a command", systemName: "terminal", action: onAddProcess)
-            }
-            .padding(.top, 4)
+            ActionTextButton(title: "Add service", systemName: "plus", prominent: true, action: onAddService)
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
