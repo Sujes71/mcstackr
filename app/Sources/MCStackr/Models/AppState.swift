@@ -28,12 +28,16 @@ final class AppState: ObservableObject {
     @Published var section: AppSection = .docker
     /// An action the header asked the current section to run.
     @Published var pendingSectionAction: SectionAction?
-    /// The request environment in use, so the header knows if it can be
-    /// removed.
-    @Published private(set) var selectedRequestEnv: String = ""
+    /// The request environment in use and the ones available. The selector
+    /// lives in the header, so both belong to the app state.
+    @Published var selectedRequestEnv: String = ""
+    @Published private(set) var requestEnvs: [RequestEnvironment] = []
 
-    func setSelectedRequestEnv(_ name: String) {
-        selectedRequestEnv = name
+    func setRequestEnvs(_ envs: [RequestEnvironment]) {
+        requestEnvs = envs
+        if !envs.contains(where: { $0.name == selectedRequestEnv }) {
+            selectedRequestEnv = envs.first?.name ?? ""
+        }
     }
     /// Bumped on every refresh, so the views reload what they show.
     @Published private(set) var refreshToken = 0

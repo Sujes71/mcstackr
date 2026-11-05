@@ -230,7 +230,13 @@ private struct HeaderView: View {
                     .lineLimit(1)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 16)
+
+            if state.section == .requests {
+                requestEnvSelector
+            }
+
+            Spacer(minLength: 16)
 
             HStack(spacing: 8) {
                 ActionIconButton(
@@ -281,6 +287,59 @@ private struct HeaderView: View {
                 }
             }
         }
+    }
+
+    /// The request environment in use. It sits in the middle of the header,
+    /// with the look of the workspace selector.
+    private var requestEnvSelector: some View {
+        Menu {
+            ForEach(state.requestEnvs) { env in
+                Button {
+                    state.selectedRequestEnv = env.name
+                } label: {
+                    if env.name == state.selectedRequestEnv {
+                        Label(env.name, systemImage: "checkmark")
+                    } else {
+                        Text(env.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Theme.accent.opacity(0.16))
+                    .frame(width: 30, height: 30)
+                    .overlay {
+                        Image(systemName: "shippingbox")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                    }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(state.selectedRequestEnv.isEmpty ? "No environment" : state.selectedRequestEnv)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                    Text("REQUEST ENVIRONMENT")
+                        .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                        .tracking(1.1)
+                        .foregroundStyle(Theme.textDim)
+                }
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Theme.textDim)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(Theme.stroke, lineWidth: 1)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     @ViewBuilder

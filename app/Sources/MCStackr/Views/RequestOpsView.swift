@@ -6,7 +6,6 @@ struct RequestOpsView: View {
     @EnvironmentObject private var state: AppState
 
     @State private var response: RequestsResponse?
-    @State private var selectedEnv: String = ""
     @State private var sheetTarget: SheetTarget?
     @State private var deleteTarget: DeleteTarget?
     @State private var errorText: String?
@@ -74,6 +73,8 @@ struct RequestOpsView: View {
         }
     }
 
+    private var selectedEnv: String { state.selectedRequestEnv }
+
     private var env: RequestEnvironment? {
         response?.envs.first { $0.name == selectedEnv }
     }
@@ -98,8 +99,6 @@ struct RequestOpsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 if let response, !response.envs.isEmpty {
-                    envRow(response)
-
                     ForEach(folders, id: \.self) { folder in
                         folderTree(folder)
                     }
@@ -124,9 +123,6 @@ struct RequestOpsView: View {
         .task { await reload() }
         .onChange(of: state.refreshToken) { _, _ in
             Task { await reload() }
-        }
-        .onChange(of: selectedEnv) { _, new in
-            state.setSelectedRequestEnv(new)
         }
         .onChange(of: state.pendingSectionAction) { _, action in
             guard let action else { return }
@@ -189,7 +185,7 @@ struct RequestOpsView: View {
             case .newEnv:
                 RequestEnvWizard { updated in
                     response = updated
-                    if let first = updated.envs.first { selectedEnv = first.name }
+                    state.setRequestEnvs(updated.envs)
                 }
                 .environmentObject(state)
             }
@@ -229,66 +225,6 @@ struct RequestOpsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
-    }
-
-    /// The environment in use. It is the root of the tree: its folders hang
-    /// from it.
-    private func envRow(_ payload: RequestsResponse) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Menu {
-                    ForEach(payload.envs) { env in
-                        Button {
-                            selectedEnv = env.name
-                        } label: {
-                            if env.name == selectedEnv {
-                                Label(env.name, systemImage: "checkmark")
-                            } else {
-                                Text(env.name)
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 9) {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Theme.accent.opacity(0.14))
-                        .frame(width: 26, height: 26)
-                        .overlay {
-                            Image(systemName: "shippingbox")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Theme.accent)
-                        }
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(selectedEnv.isEmpty ? "No environment" : selectedEnv)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Theme.text)
-                            .lineLimit(1)
-                        Text("REQUEST ENVIRONMENT")
-                            .font(.system(size: 7.5, weight: .bold, design: .rounded))
-                            .tracking(1.1)
-                            .foregroundStyle(Theme.textDim)
-                    }
-
-                    Spacer(minLength: 4)
-
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Theme.textDim)
-                }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Theme.stroke, lineWidth: 1)
-                    }
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize(horizontal: false, vertical: true)
-
-            }
-        }
     }
 
     /// Adding a folder belongs to the folder level, so the affordance sits
@@ -503,10 +439,7 @@ struct RequestOpsView: View {
             return
         }
         response = loaded
-        state.setSelectedRequestEnv(selectedEnv)
-        if !loaded.envs.contains(where: { $0.name == selectedEnv }) {
-            selectedEnv = loaded.envs.first?.name ?? ""
-        }
+        state.setRequestEnvs(loaded.envs)
     }
 
     private func performDelete(_ target: DeleteTarget) async {
@@ -524,9 +457,7 @@ struct RequestOpsView: View {
             return
         }
         response = updated
-        if !updated.envs.contains(where: { $0.name == selectedEnv }) {
-            selectedEnv = updated.envs.first?.name ?? ""
-        }
+        state.setRequestEnvs(updated.envs)
     }
 
     /// Running a request asks for every variable it uses, the ones the
