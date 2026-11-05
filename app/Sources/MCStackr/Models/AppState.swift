@@ -61,6 +61,10 @@ final class AppState: ObservableObject {
 
     var portForwardCount: Int { environmentDetail?.portForwards.count ?? portForwardEnvironment?.portForwardCount ?? 0 }
 
+    var runningForwardCount: Int {
+        (environmentDetail?.portForwards ?? []).filter(\.isRunning).count
+    }
+
     var services: [ServiceStatus] {
         status?.services ?? []
     }

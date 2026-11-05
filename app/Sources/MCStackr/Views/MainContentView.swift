@@ -152,6 +152,10 @@ private struct HeaderView: View {
 
     private var isDocker: Bool { state.section == .docker }
 
+    private var hasLive: Bool {
+        isDocker ? state.hasRunningServices : state.runningForwardCount > 0
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
@@ -161,7 +165,7 @@ private struct HeaderView: View {
                         .foregroundStyle(Theme.text)
                         .lineLimit(1)
 
-                    if isDocker, state.hasRunningServices {
+                    if hasLive {
                         Text("LIVE")
                             .font(.system(size: 8.5, weight: .black, design: .rounded))
                             .tracking(1.2)
@@ -208,9 +212,6 @@ private struct HeaderView: View {
     private var dockerActions: some View {
         if state.selectedProfile != nil, let env = state.dockerEnvironment, env.serviceCount > 0 {
             if state.runningCount > 0 {
-                ActionTextButton(title: "Restart all", systemName: "arrow.triangle.2.circlepath") {
-                    Task { await state.performEnvAction("restart") }
-                }
                 ActionTextButton(title: "Stop all", systemName: "stop.fill") {
                     Task { await state.performEnvAction("stop") }
                 }
@@ -266,10 +267,11 @@ private struct HeaderView: View {
             return "\(total) services · \(state.runningCount) running"
         case .portForward:
             let forwards = state.portForwardCount
+            let running = state.runningForwardCount
             if let description = profile.description, !description.isEmpty {
-                return "\(description) · \(forwards) port-forwards"
+                return "\(description) · \(forwards) port-forwards · \(running) running"
             }
-            return "\(forwards) port-forwards · Kubernetes and cloud workloads"
+            return "\(forwards) port-forwards · \(running) running"
         }
     }
 }
