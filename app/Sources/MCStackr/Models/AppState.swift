@@ -28,6 +28,13 @@ final class AppState: ObservableObject {
     @Published var section: AppSection = .docker
     /// An action the header asked the current section to run.
     @Published var pendingSectionAction: SectionAction?
+    /// How many folders the request collection has, so the header knows what
+    /// it can offer.
+    @Published private(set) var requestFolderCount = 0
+
+    func setRequestFolderCount(_ count: Int) {
+        requestFolderCount = count
+    }
     /// Bumped on every refresh, so the views reload what they show.
     @Published private(set) var refreshToken = 0
     /// DB operations started from the app. They live in the engine, so they

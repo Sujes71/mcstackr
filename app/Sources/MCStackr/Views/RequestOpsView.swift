@@ -126,9 +126,16 @@ struct RequestOpsView: View {
             Task { await reload() }
         }
         .onChange(of: state.pendingSectionAction) { _, action in
-            guard action == .addRequestEnv else { return }
+            guard let action else { return }
             state.pendingSectionAction = nil
-            sheetTarget = .newEnv
+            switch action {
+            case .addRequest:
+                sheetTarget = .request(folder: folders.first ?? "", request: nil)
+            case .addRequestFolder:
+                sheetTarget = .folder(folder: nil, url: "")
+            case .addRequestEnv:
+                sheetTarget = .newEnv
+            }
         }
         .sheet(item: $deleteTarget) { target in
             ConfirmSheet(
@@ -512,6 +519,7 @@ struct RequestOpsView: View {
             return
         }
         response = loaded
+        state.setRequestFolderCount(loaded.folders.count)
         if !loaded.envs.contains(where: { $0.name == selectedEnv }) {
             selectedEnv = loaded.envs.first?.name ?? ""
         }

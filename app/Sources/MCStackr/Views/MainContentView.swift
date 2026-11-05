@@ -283,12 +283,28 @@ private struct HeaderView: View {
         }
     }
 
+    /// What the add button of the section offers: a request, a folder or an
+    /// environment. A request needs a folder, so it only shows when there is
+    /// one.
+    private var requestMenuItems: [(title: String, systemImage: String, action: () -> Void)] {
+        var items: [(title: String, systemImage: String, action: () -> Void)] = []
+        if state.requestFolderCount > 0 {
+            items.append(("New request…", "list.bullet", { state.pendingSectionAction = .addRequest }))
+        }
+        items.append(("New folder…", "folder.badge.plus", { state.pendingSectionAction = .addRequestFolder }))
+        items.append(("New environment…", "shippingbox", { state.pendingSectionAction = .addRequestEnv }))
+        return items
+    }
+
     @ViewBuilder
     private var requestActions: some View {
         if state.selectedProfile != nil {
-            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add request environment") {
-                state.pendingSectionAction = .addRequestEnv
-            }
+            ActionMenuButton(
+                systemName: "plus",
+                tint: Theme.accent,
+                help: "Add a request, a folder or an environment",
+                items: requestMenuItems
+            )
         }
     }
 

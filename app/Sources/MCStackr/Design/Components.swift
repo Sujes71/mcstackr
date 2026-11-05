@@ -147,6 +147,44 @@ struct ActionIconButton: View {
     }
 }
 
+/// An icon button that opens a menu, with the same look as ActionIconButton.
+struct ActionMenuButton: View {
+    let systemName: String
+    var tint: Color = Theme.textMuted
+    var help: String = ""
+    var items: [(title: String, systemImage: String, action: () -> Void)] = []
+
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            ForEach(items.indices, id: \.self) { index in
+                Button {
+                    items[index].action()
+                } label: {
+                    Label(items[index].title, systemImage: items[index].systemImage)
+                }
+            }
+        } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(hovering ? tint : Theme.textMuted)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(hovering ? Theme.surfaceHover : Theme.field)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(hovering ? tint.opacity(0.35) : Theme.stroke, lineWidth: 1)
+                }
+        }
+        .menuStyle(.borderlessButton)
+        .onHover { hovering = $0 }
+        .help(help)
+    }
+}
+
 struct ActionTextButton: View {
     let title: String
     var systemName: String? = nil
