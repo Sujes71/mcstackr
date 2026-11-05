@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -67,6 +68,7 @@ type serviceConfigDTO struct {
 	FullImage string      `json:"fullImage"`
 	Ports     []portDTO   `json:"ports"`
 	EnvVars   []envVarDTO `json:"envVars"`
+	Volumes   []volumeDTO `json:"volumes"`
 }
 
 type portForwardDTO struct {
@@ -96,6 +98,7 @@ type updateServiceRequest struct {
 	Tag     string      `json:"tag"`
 	Ports   []portDTO   `json:"ports"`
 	EnvVars []envVarDTO `json:"envVars"`
+	Volumes []volumeDTO `json:"volumes"`
 }
 
 type statusResponse struct {
@@ -131,10 +134,28 @@ type createEnvironmentRequest struct {
 }
 
 type createServiceRequest struct {
-	Name  string          `json:"name"`
-	Image string          `json:"image"`
-	Tag   string          `json:"tag"`
-	Ports []portMappingIn `json:"ports"`
+	Name    string          `json:"name"`
+	Image   string          `json:"image"`
+	Tag     string          `json:"tag"`
+	Ports   []portMappingIn `json:"ports"`
+	EnvVars []envVarDTO     `json:"envVars"`
+	Volumes []volumeDTO     `json:"volumes"`
+}
+
+type volumeDTO struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Named  bool   `json:"named"`
+}
+
+type catalogEntryDTO struct {
+	Name                string      `json:"name"`
+	Image               string      `json:"image"`
+	Description         string      `json:"description"`
+	DefaultTag          string      `json:"defaultTag"`
+	DefaultPorts        []portDTO   `json:"defaultPorts"`
+	DefaultEnv          []envVarDTO `json:"defaultEnv"`
+	DefaultVolumeTarget string      `json:"defaultVolumeTarget"`
 }
 
 type portMappingIn struct {
@@ -197,6 +218,10 @@ func toServiceConfigDTO(s config.Service) serviceConfigDTO {
 	for _, e := range s.EnvVars {
 		envVars = append(envVars, envVarDTO{Key: e.Key, Value: e.Value})
 	}
+	volumes := make([]volumeDTO, 0, len(s.Volumes))
+	for _, v := range s.Volumes {
+		volumes = append(volumes, volumeDTO{Source: v.Source, Target: v.Target, Named: v.Named})
+	}
 	return serviceConfigDTO{
 		Name:      s.Name,
 		Image:     s.Image,
@@ -204,7 +229,27 @@ func toServiceConfigDTO(s config.Service) serviceConfigDTO {
 		FullImage: s.FullImage(),
 		Ports:     ports,
 		EnvVars:   envVars,
+		Volumes:   volumes,
 	}
+}
+
+func toVolumeMappings(in []volumeDTO) []config.VolumeMapping {
+	if in == nil {
+		return nil
+	}
+	out := make([]config.VolumeMapping, 0, len(in))
+	for _, v := range in {
+		target := strings.TrimSpace(v.Target)
+		if target == "" {
+			continue
+		}
+		out = append(out, config.VolumeMapping{
+			Source: strings.TrimSpace(v.Source),
+			Target: target,
+			Named:  v.Named,
+		})
+	}
+	return out
 }
 
 func toEnvironmentDetailDTO(e config.Environment) environmentDetailDTO {
@@ -541,6 +586,14 @@ func (s *Server) handleAddService(w http.ResponseWriter, r *http.Request) {
 			Container: strings.TrimSpace(p.Container),
 		})
 	}
+	for _, e := range req.EnvVars {
+		key := strings.TrimSpace(e.Key)
+		if key == "" {
+			continue
+		}
+		svc.EnvVars = append(svc.EnvVars, config.EnvVar{Key: key, Value: e.Value})
+	}
+	svc.Volumes = toVolumeMappings(req.Volumes)
 
 	var updated config.Profile
 	err := s.store.Update(func(c *config.Config) error {
@@ -656,6 +709,7 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 		}
 		svc.EnvVars = append(svc.EnvVars, config.EnvVar{Key: key, Value: e.Value})
 	}
+	svc.Volumes = toVolumeMappings(req.Volumes)
 
 	var updated config.Profile
 	err := s.store.Update(func(c *config.Config) error {
@@ -800,6 +854,35 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 // ── Docker / Hub helpers ────────────────────────────────────────────────────
+
+func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
+	entries := make([]catalogEntryDTO, 0, len(hub.Catalog))
+	for _, entry := range hub.Catalog {
+		ports := make([]portDTO, 0, len(entry.DefaultPorts))
+		for _, raw := range entry.DefaultPorts {
+			parts := strings.SplitN(raw, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			ports = append(ports, portDTO{Host: parts[0], Container: parts[1]})
+		}
+		env := make([]envVarDTO, 0, len(entry.DefaultEnv))
+		for key, value := range entry.DefaultEnv {
+			env = append(env, envVarDTO{Key: key, Value: value})
+		}
+		sort.Slice(env, func(i, j int) bool { return env[i].Key < env[j].Key })
+		entries = append(entries, catalogEntryDTO{
+			Name:                entry.Name,
+			Image:               entry.Image,
+			Description:         entry.Description,
+			DefaultTag:          entry.DefaultTag,
+			DefaultPorts:        ports,
+			DefaultEnv:          env,
+			DefaultVolumeTarget: entry.DefaultVolumeTarget,
+		})
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
 
 func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))

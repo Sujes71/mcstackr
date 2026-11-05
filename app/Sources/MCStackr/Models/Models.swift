@@ -104,6 +104,12 @@ struct EnvVarConfig: Codable, Hashable {
     var value: String
 }
 
+struct VolumeConfig: Codable, Hashable {
+    var source: String
+    var target: String
+    var named: Bool
+}
+
 struct ServiceConfig: Codable {
     let name: String
     let image: String
@@ -111,6 +117,7 @@ struct ServiceConfig: Codable {
     let fullImage: String
     let ports: [PortConfig]
     let envVars: [EnvVarConfig]
+    let volumes: [VolumeConfig]
 }
 
 struct UpdateServiceRequest: Encodable {
@@ -118,6 +125,19 @@ struct UpdateServiceRequest: Encodable {
     let tag: String
     let ports: [PortConfig]
     let envVars: [EnvVarConfig]
+    let volumes: [VolumeConfig]
+}
+
+struct CatalogEntry: Codable, Identifiable, Hashable {
+    let name: String
+    let image: String
+    let description: String
+    let defaultTag: String
+    let defaultPorts: [PortConfig]
+    let defaultEnv: [EnvVarConfig]
+    let defaultVolumeTarget: String
+
+    var id: String { image }
 }
 
 struct EnvironmentDetail: Codable {
@@ -167,16 +187,13 @@ enum AppSection: String, CaseIterable, Identifiable {
     }
 }
 
-struct PortMappingInput: Encodable {
-    let host: String
-    let container: String
-}
-
 struct CreateServiceRequest: Encodable {
     let name: String
     let image: String
     let tag: String
-    let ports: [PortMappingInput]
+    let ports: [PortConfig]
+    let envVars: [EnvVarConfig]
+    let volumes: [VolumeConfig]
 }
 
 // MARK: - Engine errors

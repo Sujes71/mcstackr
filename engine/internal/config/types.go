@@ -647,7 +647,8 @@ func (c *Config) DeleteService(profileName, envName, svcName string) (*Profile, 
 }
 
 // UpdateService replaces the editable fields of a service while preserving
-// everything the UI does not edit (volumes, sync envs, healthcheck, ...).
+// everything the UI does not edit (sync envs, healthcheck, ...). Volumes are
+// replaced only when the caller supplies them (nil keeps the current list).
 func (c *Config) UpdateService(profileName, envName, svcName string, updated Service) (*Profile, error) {
 	for i := range c.Profiles {
 		if c.Profiles[i].Name != profileName {
@@ -668,6 +669,9 @@ func (c *Config) UpdateService(profileName, envName, svcName string, updated Ser
 				svc.Tag = updated.Tag
 				svc.Ports = updated.Ports
 				svc.EnvVars = updated.EnvVars
+				if updated.Volumes != nil {
+					svc.Volumes = updated.Volumes
+				}
 				p.UpdatedAt = time.Now()
 				cp := *p
 				return &cp, c.Save()

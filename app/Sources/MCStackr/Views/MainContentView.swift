@@ -7,6 +7,7 @@ struct MainContentView: View {
     @State private var showAddService = false
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
+    @State private var pendingDelete: ServiceStatus?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +28,22 @@ struct MainContentView: View {
         .sheet(item: $editingService) { service in
             ServiceEditorView(service: service)
                 .environmentObject(state)
+        }
+        .confirmationDialog(
+            pendingDelete.map { "Delete \($0.name)?" } ?? "Delete service?",
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            presenting: pendingDelete
+        ) { service in
+            Button("Delete service", role: .destructive) {
+                Task { await state.deleteService(named: service.name) }
+                pendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { service in
+            Text("This removes \(service.name) from the workspace config. Running containers and volumes are not deleted.")
         }
     }
 
@@ -76,7 +93,8 @@ struct MainContentView: View {
                                         title: "\(service.name) · logs",
                                         service: service.name
                                     )
-                                }
+                                },
+                                onDelete: { pendingDelete = service }
                             )
                         }
                     }
@@ -440,6 +458,7 @@ private struct ServiceCard: View {
     let isBusy: Bool
     let onOpen: () -> Void
     let onLogs: () -> Void
+    let onDelete: () -> Void
 
     @State private var hovering = false
 
@@ -518,6 +537,12 @@ private struct ServiceCard: View {
         .cardStyle(highlighted: hovering)
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)
+        .contextMenu {
+            Button("View logs", action: onLogs)
+            Button("Configure…", action: onOpen)
+            Divider()
+            Button("Delete service…", role: .destructive, action: onDelete)
+        }
         .onHover { value in
             withAnimation(.easeOut(duration: 0.12)) { hovering = value }
         }

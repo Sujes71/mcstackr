@@ -78,6 +78,7 @@ All routes require `Authorization: Bearer <token>`.
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
+| GET | `/api/hub/catalog` | curated catalog with default ports, env vars and volume target |
 | GET | `/api/hub/search?q=` | Docker Hub search |
 | GET | `/api/images` | local Docker images |
 | POST | `/api/docker/launch` | start Colima / Docker Desktop |
@@ -85,8 +86,9 @@ All routes require `Authorization: Bearer <token>`.
 ## Scope of this slice
 
 Implemented: workspace switcher (create/delete), Docker and AWS sections, Docker
-service status, lifecycle actions, live logs, Docker Hub search, add/edit/remove
-services, shared config, engine lifecycle.
+service status, lifecycle actions, live logs, curated catalog + Docker Hub
+search, add/edit/remove services with prefilled editable defaults (ports, env
+vars, volumes), shared config, engine lifecycle.
 
 Next slices: Kubernetes port-forward + resource manager (AWS section), DB
 operations, queues, MockServer, request collections, git operations.

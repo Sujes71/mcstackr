@@ -53,6 +53,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/services/{service}", s.handleDeleteService)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/actions/{action}", s.handleServiceAction)
 
+	s.mux.HandleFunc("GET /api/hub/catalog", s.handleCatalog)
 	s.mux.HandleFunc("GET /api/hub/search", s.handleHubSearch)
 	s.mux.HandleFunc("GET /api/images", s.handleImages)
 	s.mux.HandleFunc("POST /api/docker/launch", s.handleLaunchDocker)

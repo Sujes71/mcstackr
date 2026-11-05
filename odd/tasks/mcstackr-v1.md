@@ -37,13 +37,22 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
 - **S13** — Service card: one logs affordance; clicking the card opens the
   service editor; actions are `Start` when stopped and `Restart` + `Stop` when
   running.
-- **S14** — Service editor: edit image, tag, ports and environment variables
-  (secret-looking values masked with a reveal toggle), delete with
+- **S14** — Service editor: edit image, tag, ports, environment variables and
+  volumes (secret-looking values masked with a reveal toggle), delete with
   confirmation. Saving regenerates the compose file; changes apply on the next
   restart.
 - **S15** — AWS section: read-only list of port-forwards and local processes for
   the AWS environment, with an explicit empty state; management lands in the
   next slice.
+- **S17** — Add-service flow mirrors Stackr: first choose the image (curated
+  catalog, Docker Hub search, or manual), then open the same editable form used
+  by the editor, prefilled with that image's default ports, environment
+  variables and volume target. The service name is derived from the image and
+  stays editable.
+- **S18** — Delete service is available from the editor (destructive button) and
+  from the service card context menu, both with confirmation.
+- **S19** — Engine: `GET /api/hub/catalog` exposes the curated catalog; create
+  and update service requests accept environment variables and volumes.
 - **S16** — Engine endpoints: `GET /envs/{e}` (environment detail),
   `GET /envs/{e}/services/{s}` (service config),
   `PATCH /envs/{e}/services/{s}` (update + regenerate compose),
@@ -70,6 +79,9 @@ MockServer, request collections, git operations.
 - [x] T16 — Swift: service editor sheet (image, tag, ports, env vars with masked secrets, delete). Evidence: `swift build` passes.
 - [x] T17 — Swift: AWS section with port-forward/local-process rows and empty state.
 - [x] T18 — Build and boot verification: `./scripts/build-app.sh` OK; app boots, health/profiles/status 200, 3s polling; engine exits with the app.
+- [x] T19 — Engine: catalog endpoint, env vars + volumes on create/update, volume replacement in `config.UpdateService`. Evidence: catalog returns 11 entries; add redis with defaults persisted ports+volume; PATCH added a bind mount and env var; compose shows both volumes; delete 200.
+- [x] T20 — Swift: shared `ServiceConfigForm` (name, image, tag, ports, env vars, volumes), add-service wizard (Catalog / Docker Hub / Manual → prefilled editable form). Evidence: `swift build` passes.
+- [x] T21 — Swift: destructive delete in the editor and card context menu; destructive button style. Evidence: `swift build` passes; app boots and loads the catalog.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
 
@@ -109,6 +121,16 @@ MockServer, request collections, git operations.
   (`local`, `dev`) — the gray dot turns yellow and misaligns the text;
   (6) no profiles at all: just the Docker view and the AWS view; another project
   is another workspace.
+- **L8 (user feedback, verbatim):**
+  > 1- No hay un boton para poder eliminar los servicios de docker. 2- El añadir servicio no se parece al de editar, deberiamos reevaluar el como funciona esto actualmente porque deberia funcionar parecido a como funcionaba en el original de staack r, algo como que primero en dockerhub elegimos la imagen o no y una vez que lo elegimos uqe me abarala parte que es como editar no se... pero esta claro que dependiendo el servicio deberia aparecer las configuraciones por defecto y hacerlas editables como haciamos en stackr esto hay que verlo de nuevo. Luegfo es una duda, sguro qeu AWS es lo que hacemos en stackr original cuando hacemos port forward a los servicios qeu tenemos en k8s ? es un buen naming?
+- **L9 (decision):** add-service now mirrors the original TUI: source
+  (catalog/search/manual) → prefilled config form. Defaults live in the Go
+  catalog and are exposed through `GET /api/hub/catalog`. Volumes are part of
+  the shared form and of create/update. Service deletion moved to a destructive
+  action in the editor plus a card context menu (the TUI binds it to `d`).
+  Open question: the AWS section name; the original Stackr treats every
+  non-`local` environment as a port-forward/K8s environment, so `AWS` is
+  narrower than the concept.
 - **L7 (decision):** workspace = Stackr profile, keeping the on-disk schema
   unchanged for CLI compatibility. Docker section = environment `local`; AWS
   section = environments whose name is not `local`. New workspaces create

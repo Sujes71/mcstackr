@@ -149,6 +149,7 @@ struct ActionTextButton: View {
     let title: String
     var systemName: String? = nil
     var prominent: Bool = false
+    var destructive: Bool = false
     var tint: Color = Theme.accent
     var action: () -> Void
 
@@ -164,21 +165,39 @@ struct ActionTextButton: View {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
             }
-            .foregroundStyle(prominent ? Theme.accentInk : (hovering ? Theme.text : Theme.textMuted))
+            .foregroundStyle(buttonForeground)
             .padding(.horizontal, 13)
             .padding(.vertical, 9)
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(prominent ? tint : (hovering ? Theme.surfaceHover : Theme.field))
+                    .fill(buttonBackground)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(prominent ? .clear : (hovering ? tint.opacity(0.4) : Theme.stroke), lineWidth: 1)
+                    .stroke(buttonBorder, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var buttonForeground: Color {
+        if prominent { return Theme.accentInk }
+        if destructive { return Theme.danger }
+        return hovering ? Theme.text : Theme.textMuted
+    }
+
+    private var buttonBackground: Color {
+        if prominent { return tint }
+        if destructive { return Theme.danger.opacity(hovering ? 0.22 : 0.12) }
+        return hovering ? Theme.surfaceHover : Theme.field
+    }
+
+    private var buttonBorder: Color {
+        if prominent { return .clear }
+        if destructive { return Theme.danger.opacity(0.45) }
+        return hovering ? tint.opacity(0.4) : Theme.stroke
     }
 }
 

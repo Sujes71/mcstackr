@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     @Published private(set) var engineVersion = ""
     @Published private(set) var configPath = ""
     @Published private(set) var environmentDetail: EnvironmentDetail?
+    @Published private(set) var catalog: [CatalogEntry] = []
 
     @Published var section: AppSection = .docker {
         didSet {
@@ -93,6 +94,7 @@ final class AppState: ObservableObject {
             if selectedProfile != nil {
                 await refreshStatus()
             }
+            catalog = (try? await client.get("/api/hub/catalog")) ?? []
             bootPhase = .ready
             startPolling()
         } catch {
@@ -308,19 +310,27 @@ final class AppState: ObservableObject {
         }
     }
 
-    func addService(name: String, image: String, tag: String, hostPort: String, containerPort: String) async -> Bool {
+    func addService(
+        name: String,
+        image: String,
+        tag: String,
+        ports: [PortConfig],
+        envVars: [EnvVarConfig],
+        volumes: [VolumeConfig]
+    ) async -> Bool {
         guard let client, let profileName = selectedProfileName, let envName = selectedEnvName else { return false }
-        var ports: [PortMappingInput] = []
-        let host = hostPort.trimmingCharacters(in: .whitespaces)
-        let container = containerPort.trimmingCharacters(in: .whitespaces)
-        if !host.isEmpty, !container.isEmpty {
-            ports = [PortMappingInput(host: host, container: container)]
-        }
 
         do {
             let _: Profile = try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services",
-                body: CreateServiceRequest(name: name, image: image, tag: tag, ports: ports)
+                body: CreateServiceRequest(
+                    name: name,
+                    image: image,
+                    tag: tag,
+                    ports: ports,
+                    envVars: envVars,
+                    volumes: volumes
+                )
             )
             try await reloadProfiles()
             await refreshStatus()
@@ -329,6 +339,19 @@ final class AppState: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// Defaults for a known image, from the curated catalog. Accepts a full
+    /// reference (`postgres:16`, `library/redis`) or a bare image name.
+    func catalogDefaults(forImage image: String) -> CatalogEntry? {
+        var base = image.trimmingCharacters(in: .whitespaces)
+        if let colon = base.firstIndex(of: ":") {
+            base = String(base[base.startIndex..<colon])
+        }
+        if base.hasPrefix("library/") {
+            base.removeFirst("library/".count)
+        }
+        return catalog.first { $0.image == base }
     }
 
     func serviceConfig(named name: String) async -> ServiceConfig? {
@@ -348,13 +371,20 @@ final class AppState: ObservableObject {
         image: String,
         tag: String,
         ports: [PortConfig],
-        envVars: [EnvVarConfig]
+        envVars: [EnvVarConfig],
+        volumes: [VolumeConfig]
     ) async -> Bool {
         guard let client, let profileName = selectedProfileName, let envName = selectedEnvName else { return false }
         do {
             let _: Profile = try await client.patch(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services/\(name.pathComponentEncoded)",
-                body: UpdateServiceRequest(image: image, tag: tag, ports: ports, envVars: envVars)
+                body: UpdateServiceRequest(
+                    image: image,
+                    tag: tag,
+                    ports: ports,
+                    envVars: envVars,
+                    volumes: volumes
+                )
             )
             try await reloadProfiles()
             await refreshStatus()

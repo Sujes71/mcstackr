@@ -8,11 +8,12 @@ struct ServiceEditorView: View {
 
     @State private var isLoading = true
     @State private var isSaving = false
+    @State private var name = ""
     @State private var image = ""
     @State private var tag = ""
     @State private var ports: [PortConfig] = []
     @State private var envVars: [EnvVarConfig] = []
-    @State private var revealSecrets = false
+    @State private var volumes: [VolumeConfig] = []
     @State private var confirmDelete = false
     @State private var localError: String?
 
@@ -27,13 +28,34 @@ struct ServiceEditorView: View {
                     .tint(Theme.accent)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                form
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        if let localError {
+                            Text(localError)
+                                .font(.system(size: 11, design: .rounded))
+                                .foregroundStyle(Theme.danger)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        ServiceConfigForm(
+                            showName: false,
+                            name: $name,
+                            image: $image,
+                            tag: $tag,
+                            ports: $ports,
+                            envVars: $envVars,
+                            volumes: $volumes
+                        )
+                    }
+                    .padding(22)
+                }
+                .scrollIndicators(.hidden)
             }
 
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 640, height: 660)
+        .frame(width: 660, height: 680)
         .background(Theme.background)
         .task { await load() }
         .confirmationDialog(
@@ -62,7 +84,7 @@ struct ServiceEditorView: View {
                         TechBadge(text: db, color: dbColor(db))
                     }
                 }
-                Text("Configure image, ports and environment variables.")
+                Text("Configure image, ports, environment variables and volumes.")
                     .font(.system(size: 11.5, design: .rounded))
                     .foregroundStyle(Theme.textMuted)
             }
@@ -77,108 +99,9 @@ struct ServiceEditorView: View {
         .padding(.vertical, 18)
     }
 
-    private var form: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                if let localError {
-                    Text(localError)
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(Theme.danger)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                section("IMAGE") {
-                    HStack(alignment: .bottom, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            FieldLabel(text: "Image")
-                            ThemedTextField(placeholder: "e.g. postgres", text: $image)
-                        }
-                        VStack(alignment: .leading, spacing: 6) {
-                            FieldLabel(text: "Tag")
-                            ThemedTextField(placeholder: "e.g. 16-alpine", text: $tag)
-                                .frame(width: 170)
-                        }
-                    }
-
-                    if let db = service.dbType, db.lowercased().contains("postgres") || db.lowercased().contains("mysql") || db.lowercased().contains("mariadb") || db.lowercased().contains("mongo") {
-                        Text("Database credentials are defined as environment variables below.")
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundStyle(Theme.textDim)
-                    }
-                }
-
-                section("PORTS") {
-                    VStack(spacing: 8) {
-                        ForEach($ports.indices, id: \.self) { index in
-                            HStack(spacing: 10) {
-                                ThemedTextField(placeholder: "Host", text: $ports[index].host)
-                                    .frame(width: 130)
-                                Image(systemName: "arrow.right")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(Theme.textDim)
-                                ThemedTextField(placeholder: "Container", text: $ports[index].container)
-                                    .frame(width: 130)
-                                Spacer()
-                                ActionIconButton(systemName: "minus.circle", tint: Theme.danger, help: "Remove port") {
-                                    ports.remove(at: index)
-                                }
-                            }
-                        }
-
-                        ActionTextButton(title: "Add port", systemName: "plus") {
-                            ports.append(PortConfig(host: "", container: ""))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-
-                section("ENVIRONMENT VARIABLES") {
-                    HStack {
-                        Text("Values are stored in ~/.stackr/config.yaml")
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundStyle(Theme.textDim)
-                        Spacer()
-                        Button {
-                            revealSecrets.toggle()
-                        } label: {
-                            Text(revealSecrets ? "Hide secrets" : "Reveal secrets")
-                                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.info)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    VStack(spacing: 8) {
-                        ForEach($envVars.indices, id: \.self) { index in
-                            HStack(spacing: 10) {
-                                ThemedTextField(placeholder: "KEY", text: $envVars[index].key)
-                                    .frame(width: 210)
-                                if isSecretKey(envVars[index].key), !revealSecrets {
-                                    ThemedSecureField(placeholder: "value", text: $envVars[index].value)
-                                } else {
-                                    ThemedTextField(placeholder: "value", text: $envVars[index].value)
-                                }
-                                ActionIconButton(systemName: "minus.circle", tint: Theme.danger, help: "Remove variable") {
-                                    envVars.remove(at: index)
-                                }
-                            }
-                        }
-
-                        ActionTextButton(title: "Add variable", systemName: "plus") {
-                            envVars.append(EnvVarConfig(key: "", value: ""))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-            }
-            .padding(22)
-        }
-        .scrollIndicators(.hidden)
-    }
-
     private var footer: some View {
         HStack(spacing: 10) {
-            ActionTextButton(title: "Delete", systemName: "trash", tint: Theme.danger) {
+            ActionTextButton(title: "Delete service", systemName: "trash", destructive: true) {
                 confirmDelete = true
             }
             .disabled(isSaving)
@@ -206,24 +129,6 @@ struct ServiceEditorView: View {
         .padding(.vertical, 14)
     }
 
-    private func section<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(1.1)
-                .foregroundStyle(Theme.textDim)
-            content()
-        }
-    }
-
-    private func isSecretKey(_ key: String) -> Bool {
-        let upper = key.uppercased()
-        return ["PASSWORD", "SECRET", "TOKEN", "API_KEY", "PRIVATE"].contains { upper.contains($0) }
-    }
-
     private func load() async {
         guard let config = await state.serviceConfig(named: service.name) else {
             localError = state.errorMessage ?? "Could not load the service config."
@@ -231,10 +136,12 @@ struct ServiceEditorView: View {
             isLoading = false
             return
         }
+        name = config.name
         image = config.image
         tag = config.tag
         ports = config.ports
         envVars = config.envVars
+        volumes = config.volumes
         isLoading = false
     }
 
@@ -249,18 +156,20 @@ struct ServiceEditorView: View {
         isSaving = true
         defer { isSaving = false }
 
-        let cleanedPorts = ports.filter {
+        let cleanPorts = ports.filter {
             !$0.host.trimmingCharacters(in: .whitespaces).isEmpty &&
             !$0.container.trimmingCharacters(in: .whitespaces).isEmpty
         }
-        let cleanedEnvVars = envVars.filter { !$0.key.trimmingCharacters(in: .whitespaces).isEmpty }
+        let cleanEnvVars = envVars.filter { !$0.key.trimmingCharacters(in: .whitespaces).isEmpty }
+        let cleanVolumes = volumes.filter { !$0.target.trimmingCharacters(in: .whitespaces).isEmpty }
 
         let saved = await state.updateService(
             named: service.name,
             image: trimmedImage,
             tag: tag.trimmingCharacters(in: .whitespaces),
-            ports: cleanedPorts,
-            envVars: cleanedEnvVars
+            ports: cleanPorts,
+            envVars: cleanEnvVars,
+            volumes: cleanVolumes
         )
         if saved {
             dismiss()
