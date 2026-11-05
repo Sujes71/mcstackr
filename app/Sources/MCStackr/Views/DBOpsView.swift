@@ -36,20 +36,40 @@ struct DBOpsView: View {
     private enum Confirm: Identifiable {
         case action(DBAction)
         case customAction(DBSyncEnv, CustomAction, [String: String])
+        case deleteCustomAction(DBSyncEnv, CustomAction)
 
         var id: String {
             switch self {
             case .action(let action): return "action-\(action.id)"
             case .customAction(let env, let action, _): return "custom-\(env.name)-\(action.name)"
+            case .deleteCustomAction(let env, let action): return "delete-\(env.name)-\(action.name)"
             }
         }
 
         var title: String {
             switch self {
-            case .action(let action): return action.label
-            case .customAction(_, let action, _): return action.name
+            case .action(let action): return "\(action.label)?"
+            case .customAction(_, let action, _): return "Run “\(action.name)”?"
+            case .deleteCustomAction(_, let action): return "Delete action “\(action.name)”?"
             }
         }
+
+        var confirmTitle: String {
+            switch self {
+            case .action(let action): return "Run \(action.label.lowercased())"
+            case .customAction(_, let action, _): return "Run action"
+            case .deleteCustomAction: return "Delete action"
+            }
+        }
+
+        var destructive: Bool {
+            switch self {
+            case .action(let action): return action.destructive == true
+            case .customAction: return true
+            case .deleteCustomAction: return true
+            }
+        }
+
     }
 
     private var syncEnv: DBSyncEnv? {
@@ -113,31 +133,22 @@ struct DBOpsView: View {
                 }
             }
         }
-        .confirmationDialog(
-            confirm?.title ?? "",
-            isPresented: Binding(
-                get: { confirm != nil },
-                set: { if !$0 { confirm = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            if let confirm {
-                switch confirm {
+        .sheet(item: $confirm) { target in
+            ConfirmSheet(
+                title: target.title,
+                message: confirmationMessage(for: target),
+                confirmTitle: target.confirmTitle,
+                destructive: target.destructive
+            ) {
+                switch target {
                 case .action(let action):
-                    Button(action.label, role: .destructive) {
-                        self.confirm = nil
-                        run(action)
-                    }
+                    run(action)
                 case .customAction(let env, let action, let params):
-                    Button("Run \(action.name)", role: .destructive) {
-                        self.confirm = nil
-                        runCustom(action, env: env, params: params)
-                    }
+                    runCustom(action, env: env, params: params)
+                case .deleteCustomAction(let env, let action):
+                    deleteCustom(action, env: env)
                 }
-                Button("Cancel", role: .cancel) { self.confirm = nil }
             }
-        } message: {
-            Text(confirmationMessage(for: confirm))
         }
     }
 
@@ -430,7 +441,7 @@ struct DBOpsView: View {
             }
 
             ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete action") {
-                confirm = .customAction(env, action, [:])
+                confirm = .deleteCustomAction(env, action)
             }
         }
         .padding(.vertical, 2)
@@ -617,6 +628,21 @@ struct DBOpsView: View {
         await poll(started.id, env: env)
     }
 
+    private func deleteCustom(_ action: CustomAction, env: DBSyncEnv) {
+        errorText = nil
+        Task {
+            guard let updated = await state.deleteCustomAction(
+                service: service.name,
+                syncEnv: env.name,
+                name: action.name
+            ) else {
+                errorText = state.errorMessage ?? "Could not delete the action."
+                return
+            }
+            info = updated
+        }
+    }
+
     private func reload(selectFirst: Bool) async {
         guard let loaded = await state.fetchDBOps(service: service.name) else {
             errorText = state.errorMessage
@@ -635,6 +661,8 @@ struct DBOpsView: View {
             return actionMessage(for: action)
         case .customAction(let env, let action, _):
             return "This runs “\(action.command)” inside \(service.name) for \(env.name)."
+        case .deleteCustomAction(let env, let action):
+            return "This removes the action from \(env.name). It does not touch the database."
         }
     }
 

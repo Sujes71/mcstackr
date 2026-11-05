@@ -54,8 +54,9 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
 - **S19** — Engine: `GET /api/hub/catalog` exposes the curated catalog; create
   and update service requests accept environment variables and volumes.
 - **S20** — One delete pattern everywhere: a red destructive button in the sheet
-  footer (left), a native confirmation dialog, and the same placement in the
-  service editor and in workspace settings. Workspace deletion lives in
+  footer (left), the app's standard confirmation window (never the system
+  `confirmationDialog`), and the same placement in the service editor and in
+  workspace settings. Workspace deletion lives in
   `Workspace settings…` (description editable via `PATCH /api/profiles/{p}`),
   not in the workspace menu.
 - **S21** — Sheet chrome: one close affordance per sheet (the header `x`); no
@@ -127,12 +128,22 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   `SEARCH` for elasticsearch/opensearch/solr, `CACHE` for
   redis/valkey/memcached, and `PROCESS` for host commands. Unknown images show
   no badge.
+- **S47** — Every confirmation in the app is a window of the app, never a
+  system popover. `ConfirmSheet` is the single confirmation surface: the same
+  header, the same `x` close, the same footer buttons as every other sheet, a
+  red destructive button on the left and `Cancel` on the right. It is used by
+  every delete in the app — service, local process, port-forward, sync
+  environment and custom action — and by the destructive DB operations
+  (truncate, import schema, import data) and by custom action runs. The
+  system `confirmationDialog` is not used anywhere: on macOS it renders as a
+  popover anchored to the control that opened it, which does not match the
+  app's windows and reads as a different application.
 - **S46** — Each sync environment carries its own custom actions, listed in
   the `Actions` group below truncate: name plus command, with run, edit and
   delete affordances and an `Add action` row. Adding and editing open a sheet
   with a name field and a multiline command editor that lists the available
   variables; deleting follows the app's delete standard (red destructive button
-  in the sheet footer plus the native confirmation dialog). A custom action
+  in the sheet footer plus the app's standard confirmation window). A custom action
   runs inside the local service container (`docker exec -i <container> sh -c`)
   with a 60s timeout, as an engine background job, so output and errors show in
   the same job card as the built-in actions. `{host}`, `{user}`, `{password}`,
@@ -154,7 +165,7 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   as a failed export. The sync-environment wizard prefills the tool image with
   the service's own image, which is already pulled and matches the server
   version. Deleting a sync environment follows the app's delete standard: a
-  red destructive button in the wizard footer plus the native confirmation
+  red destructive button in the wizard footer plus the app's standard confirmation
   dialog, never a header icon.
 - **S44** — Sync environments are created and edited from the app, not by
   hand-editing the shared config. The wizard lives in the DB operations sheet
@@ -231,6 +242,7 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T47 — Standard confirmation window: new `ConfirmSheet` component in the app's chrome (header with warning icon and `x` close, message, footer with a red destructive button on the left and `Cancel` on the right), replacing every system `confirmationDialog`: service, local process and port-forward deletes in `MainContentView` (one `DeleteTarget` enum), sync-environment delete in `SyncEnvWizard`, custom-action delete in `CustomActionWizard`, and the DB operations confirmations in `DBOpsView` (truncate, import, custom action run, custom action delete). Evidence: the app contains no `confirmationDialog` and no `.alert`; nested presentation works — a harness confirmed that a sheet can present another sheet (main → sheet → sheet → sheet, three levels), which is the path used when the sync-environment wizard confirms its own delete; `swift build`, bundle rebuild and boot clean.
 - [x] T46 — Custom actions: engine `custom-actions` CRUD on a sync environment plus `POST /dbops/custom/{action}` (param substitution, auto variables with decrypted password, client auto-wrap, `docker exec -i … sh -c`, 60s timeout, Oracle via `OracleExecSQL`); `customActions` added to the DB ops DTO; Swift `CustomActionWizard` and `CustomActionParamsView`, rows under truncate in the `Actions` group with run/edit/delete and `Add action`. Evidence: on an isolated postgres profile `SELECT count(*) FROM information_schema.tables;` was auto-wrapped into psql and returned 209; `SELECT {n} AS n;` with `params {"n":"42"}` returned 42, without it 400 `missing values for n`; `sh -c "echo hola"` ran verbatim (no wrap); duplicate name 400, empty command 400, unknown sync env 404, rename works, rename collision 400, update/delete unknown 404, unknown action on run 404; `go build`/`go vet`/`swift build`/bundle/boot clean.
 - [x] T45 — DB ops corrections from review: group `Maintenance` renamed to `Actions`, Done button removed, tool images ensured (pull inside the job) before export, wizard prefills the tool image with the service image, sync-env delete moved to the wizard footer as a destructive button with confirmation. Evidence: export-data with an absent `postgres:13-alpine` tool image pulled it inside the job and then failed only on the real version mismatch (pg_dump 13 vs server 16), proving the pull path; group order is Export/Import/Actions; `go build`/`go vet`/`swift build`/bundle/boot clean.
 - [x] T44 — Sync environment wizard: engine `sync-envs` create/update/delete over the shared config (DB type from the service, AES-GCM password via `SetPassword`, unique names, rename support, 404 for unknown profile/env/service/sync env) and the Swift `SyncEnvWizard` sheet reached from the DB operations header (add, edit, delete with confirmation). Evidence: create stores `enc:AES256-GCM:…`; omitted password keeps it, empty clears it; duplicate name 400, bad port 400, missing host/user 400, non-DB service 400, unknown profile/env/sync env 404; real config still parses (Globick mongo `dev`, postgres `local`); `go build`/`go vet`/`swift build`, bundle rebuild and boot clean.
@@ -299,7 +311,7 @@ MockServer, request collections, git operations.
   hairline rules) is shared, and every sheet follows the same shell and footer
   placement. New workspace was rebuilt on that shell.
 - **L11 (decision):** delete is now one pattern: red destructive button on the
-  left of a sheet footer plus a native confirmation, used by the service editor
+  left of a sheet footer plus the app's standard confirmation window, used by the service editor
   and by the new workspace settings sheet (workspace delete left the dropdown).
   Every sheet has a single close affordance. The add-service back affordance is
   a bare `<`. Workspace names show in full and are capped at 24 characters.

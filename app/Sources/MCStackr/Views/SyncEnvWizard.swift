@@ -59,17 +59,14 @@ struct SyncEnvWizard: View {
         .frame(width: 640, height: 640)
         .background(Theme.background)
         .onAppear(perform: prefill)
-        .confirmationDialog(
-            "Delete sync environment “\(existing?.name ?? "")”?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
+        .sheet(isPresented: $confirmDelete) {
+            ConfirmSheet(
+                title: "Delete sync environment “\(existing?.name ?? "")”?",
+                message: "This removes it from the config. Its dumps stay on disk.",
+                confirmTitle: "Delete environment"
+            ) {
                 Task { await deleteEnv() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes it from the config. Its dumps stay on disk.")
         }
     }
 

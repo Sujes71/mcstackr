@@ -6,13 +6,53 @@ struct MainContentView: View {
 
     @State private var showAddService = false
     @State private var dbOpsService: ServiceStatus?
-    @State private var pendingDeleteProcess: LocalProcessInfo?
+    @State private var deleteTarget: DeleteTarget?
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
-    @State private var pendingDelete: ServiceStatus?
     @State private var showAddPortForward = false
     @State private var editingForward: PortForwardInfo?
-    @State private var pendingDeleteForward: PortForwardInfo?
+
+    /// Every delete in the app confirms through the same window.
+    private enum DeleteTarget: Identifiable {
+        case service(ServiceStatus)
+        case process(LocalProcessInfo)
+        case forward(PortForwardInfo)
+
+        var id: String {
+            switch self {
+            case .service(let service): return "service-\(service.name)"
+            case .process(let process): return "process-\(process.name)"
+            case .forward(let forward): return "forward-\(forward.name)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .service(let service): return "Delete service “\(service.name)”?"
+            case .process(let process): return "Delete local process “\(process.name)”?"
+            case .forward(let forward): return "Delete port-forward “\(forward.name)”?"
+            }
+        }
+
+        var confirmTitle: String {
+            switch self {
+            case .service: return "Delete service"
+            case .process: return "Delete process"
+            case .forward: return "Delete forward"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .service(let service):
+                return "This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost."
+            case .process(let process):
+                return "This stops \(process.name) and removes it from the workspace."
+            case .forward(let forward):
+                return "This stops the forward and removes it from the workspace."
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,54 +86,27 @@ struct MainContentView: View {
             PortForwardEditorView(forward: forward)
                 .environmentObject(state)
         }
-        .confirmationDialog(
-            pendingDeleteProcess.map { "Delete \($0.name)?" } ?? "Delete local process?",
-            isPresented: Binding(
-                get: { pendingDeleteProcess != nil },
-                set: { if !$0 { pendingDeleteProcess = nil } }
-            ),
-            presenting: pendingDeleteProcess
-        ) { process in
-            Button("Delete process", role: .destructive) {
-                Task { await state.deleteLocalProcess(named: process.name) }
-                pendingDeleteProcess = nil
+        .sheet(item: $deleteTarget) { target in
+            ConfirmSheet(
+                title: target.title,
+                message: target.message,
+                confirmTitle: target.confirmTitle
+            ) {
+                Task { await performDelete(target) }
             }
-            Button("Cancel", role: .cancel) { pendingDeleteProcess = nil }
-        } message: { process in
-            Text("This stops \(process.name) and removes it from \(state.workspaceName).")
         }
-        .confirmationDialog(
-            pendingDeleteForward.map { "Delete \($0.name)?" } ?? "Delete port-forward?",
-            isPresented: Binding(
-                get: { pendingDeleteForward != nil },
-                set: { if !$0 { pendingDeleteForward = nil } }
-            ),
-            presenting: pendingDeleteForward
-        ) { forward in
-            Button("Delete port-forward", role: .destructive) {
-                Task { await state.deletePortForward(named: forward.name) }
-                pendingDeleteForward = nil
-            }
-            Button("Cancel", role: .cancel) { pendingDeleteForward = nil }
-        } message: { forward in
-            Text("This stops the forward and removes it from \(state.workspaceName).")
+    }
+
+    private func performDelete(_ target: DeleteTarget) async {
+        switch target {
+        case .service(let service):
+            await state.deleteService(named: service.name)
+        case .process(let process):
+            await state.deleteLocalProcess(named: process.name)
+        case .forward(let forward):
+            await state.deletePortForward(named: forward.name)
         }
-        .confirmationDialog(
-            pendingDelete.map { "Delete \($0.name)?" } ?? "Delete service?",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: { if !$0 { pendingDelete = nil } }
-            ),
-            presenting: pendingDelete
-        ) { service in
-            Button("Delete service", role: .destructive) {
-                Task { await state.deleteService(named: service.name) }
-                pendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: { service in
-            Text("This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost.")
-        }
+        deleteTarget = nil
     }
 
     @ViewBuilder
@@ -104,7 +117,7 @@ struct MainContentView: View {
             PortForwardView(
                 onAdd: { showAddPortForward = true },
                 onEdit: { editingForward = $0 },
-                onDelete: { pendingDeleteForward = $0 }
+                onDelete: { deleteTarget = .forward($0) }
             )
         } else {
             dockerContent
@@ -148,7 +161,7 @@ struct MainContentView: View {
                                     )
                                 },
                                 onDBOps: { dbOpsService = service },
-                                onDelete: { pendingDelete = service }
+                                onDelete: { deleteTarget = .service(service) }
                             )
                         }
 
@@ -163,7 +176,7 @@ struct MainContentView: View {
                                         Task { await state.startLocalProcess(process) }
                                     }
                                 },
-                                onDelete: { pendingDeleteProcess = process }
+                                onDelete: { deleteTarget = .process(process) }
                             )
                         }
                     }

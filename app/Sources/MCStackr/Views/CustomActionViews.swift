@@ -66,17 +66,14 @@ struct CustomActionWizard: View {
         .frame(width: 680, height: 560)
         .background(Theme.background)
         .onAppear(perform: prefill)
-        .confirmationDialog(
-            "Delete action “\(existing?.name ?? "")”?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
+        .sheet(isPresented: $confirmDelete) {
+            ConfirmSheet(
+                title: "Delete action “\(existing?.name ?? "")”?",
+                message: "This removes the action from the sync environment. It does not touch the database.",
+                confirmTitle: "Delete action"
+            ) {
                 Task { await deleteAction() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes the action from the sync environment.")
         }
     }
 
