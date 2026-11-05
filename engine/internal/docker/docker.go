@@ -857,6 +857,22 @@ func HasAnyDump(dumpDir string, patterns []string) bool {
 // FindLatestDump returns the most recent dump file matching the given pattern
 // in the dump directory. Pattern "" means check for subdirectories (mongo).
 // Returns the full path to the most recent dump.
+// dirHasContent reports whether a directory holds at least one file with
+// content. An empty directory is the leftover of a failed export.
+func dirHasContent(dir string) bool {
+	found := false
+	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		if info.Size() > 0 {
+			found = true
+		}
+		return nil
+	})
+	return found
+}
+
 func FindLatestDump(dumpDir, pattern string) (string, error) {
 	if pattern == "" {
 		entries, err := os.ReadDir(dumpDir)
@@ -865,8 +881,12 @@ func FindLatestDump(dumpDir, pattern string) (string, error) {
 		}
 		var dirs []string
 		for _, e := range entries {
-			if e.IsDir() {
-				dirs = append(dirs, filepath.Join(dumpDir, e.Name()))
+			if !e.IsDir() {
+				continue
+			}
+			path := filepath.Join(dumpDir, e.Name())
+			if dirHasContent(path) {
+				dirs = append(dirs, path)
 			}
 		}
 		if len(dirs) == 0 {

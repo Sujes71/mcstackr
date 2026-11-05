@@ -357,10 +357,17 @@ func listDumps(dir, dbType string) []dbDumpDTO {
 			if dbType != "mongo" {
 				continue
 			}
+			// A mongo dump is a directory. An empty one is the leftover of a
+			// failed export, not a dump: counting it would offer an import
+			// that has nothing to restore.
+			size := dirSize(path)
+			if size == 0 {
+				continue
+			}
 			dumps = append(dumps, dbDumpDTO{
 				File:       entry.Name(),
 				Kind:       "data",
-				Size:       dirSize(path),
+				Size:       size,
 				ModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
 			})
 			continue

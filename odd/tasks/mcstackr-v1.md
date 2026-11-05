@@ -141,6 +141,16 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   as a popover anchored to the control that opened it, with its buttons
   stacked vertically, which does not match the app's windows and reads as a
   different application.
+- **S51** — The criterion to import is the same for every database type: an
+  import needs a dump of that kind for the sync environment, and the local
+  container running, because the import restores into it. Postgres needs a
+  `schema-*.sql` for the schema import and a `data-*.sql` for the data
+  import; Mongo needs a data dump (a directory with the exported
+  collections); SQL Server needs a `data-*.bacpac`; Oracle a `data-*.dmp`.
+  When the requirement is missing, the action stays visible but disabled and
+  says why: `no schema dump`, `no data dump` or `start the service first`.
+  A folder left behind by a failed export is not a dump: it holds nothing to
+  restore, so it never enables an import.
 - **S49** — Operations are background work, not a modal state. The engine owns
   the job: it keeps running when the sheet is closed, when the user changes
   workspace, and when several operations run at the same time. The app keeps a
@@ -269,6 +279,15 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T51 — Import criterion per database type, audited end to end: the export
+  name and the import pattern of every type were paired and checked (postgres
+  `schema-*.sql` / `data-*.sql`, mongo directory, mysql `data-*.sql`, mssql
+  `data-*.bacpac`, oracle `data-*.dmp`), and an empty folder left by a failed
+  export no longer counts as a mongo dump. Evidence: with the container up,
+  postgres with both dumps enables every action, postgres without dumps
+  disables the imports with `no schema dump` and `no data dump`, and mongo
+  with a data dump enables its import; the empty leftover folder is ignored;
+  `go build`/`go vet` clean.
 - [x] T49 — Background operations with notices: the engine job DTO now carries the service, sync environment, action and label, and a new `GET .../dbops/jobs` lists the operations of a service; the app keeps a global registry (`AppState.dbJobs`) with a poller that follows the jobs across sheets and workspaces, raises a notice per finished operation (success or failure) that stays until it is dismissed, and the DB operations sheet renders the history of the service instead of a single job. Evidence: a custom action started from the sheet finished after the sheet was closed and the notice appeared in the main window ("ping finished"), it was still there 30 seconds later, and the sheet listed both operations in parallel ("Export data / running" and "ping / done"); the notice carries the failure text when the operation fails.
 - [x] T50 — Sync environment edits stop destroying what they do not own: the update handler keeps the existing custom actions (the request only carries the connection fields) and migrates the dump folder when the sync environment is renamed, like the console runtime does. Evidence: the custom action of a sync environment survived two consecutive edits of the tool image; renaming a sync environment moved its dump folder to the new name; the dumps that were left behind under the old name were recovered by hand and show up in the sheet again.
 - [x] T48 — Confirmation window independent of the host width: dropped the fixed 480pt frame for a 300/460/520pt range, made the footer row fixed-size so the two buttons can never stack, and shortened the destructive label to `Delete` (the title names the target) and `Run` for action confirmations. Evidence: in the 520pt Workspace settings sheet the confirmation previously opened at 260x188 with the buttons stacked at x=747 (y=550 and y=584); after the change it opens at 470x210 with the buttons side by side at x=648 and x=760, same y=583; the app has zero `confirmationDialog` and zero `.alert`; `swift build`, bundle rebuild and boot clean.
