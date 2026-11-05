@@ -1,0 +1,117 @@
+import Foundation
+
+// MARK: - Profiles
+
+struct Profile: Codable, Identifiable, Hashable {
+    let name: String
+    let description: String?
+    let activeEnv: String
+    let environments: [ProfileEnvironment]
+
+    var id: String { name }
+}
+
+struct ProfileEnvironment: Codable, Identifiable, Hashable {
+    let name: String
+    let serviceCount: Int
+    let portForwardCount: Int
+    let localProcessCount: Int
+
+    var id: String { name }
+}
+
+// MARK: - Runtime status
+
+struct ServiceStatus: Codable, Identifiable, Hashable {
+    let name: String
+    let container: String
+    let fullImage: String
+    let dbType: String?
+    let state: String
+    let health: String?
+    let ports: String?
+
+    var id: String { name }
+
+    var isRunning: Bool { state.lowercased() == "running" }
+    var isBusy: Bool {
+        let s = state.lowercased()
+        return s == "restarting" || s == "starting" || s == "created"
+    }
+    var isStopped: Bool {
+        let s = state.lowercased()
+        return s == "exited" || s == "stopped" || s == "dead"
+    }
+}
+
+struct StatusResponse: Codable {
+    let dockerAvailable: Bool
+    let error: String?
+    let services: [ServiceStatus]
+    let refreshedAt: String
+}
+
+struct HealthResponse: Codable {
+    let status: String
+    let version: String
+    let dockerAvailable: Bool
+    let configPath: String
+}
+
+// MARK: - Docker Hub / images
+
+struct HubResult: Codable, Identifiable, Hashable {
+    let name: String
+    let description: String
+    let official: Bool
+    let stars: Int
+    let pulls: Int
+
+    var id: String { name }
+}
+
+struct DockerImage: Codable, Identifiable, Hashable {
+    let repository: String
+    let tag: String
+    let imageID: String
+    let size: String
+
+    var id: String { "\(repository):\(tag)" }
+
+    enum CodingKeys: String, CodingKey {
+        case repository
+        case tag
+        case imageID = "id"
+        case size
+    }
+}
+
+// MARK: - Requests
+
+struct CreateProfileRequest: Encodable {
+    let name: String
+    let description: String
+    let environments: [String]
+}
+
+struct CreateEnvironmentRequest: Encodable {
+    let name: String
+}
+
+struct PortMappingInput: Encodable {
+    let host: String
+    let container: String
+}
+
+struct CreateServiceRequest: Encodable {
+    let name: String
+    let image: String
+    let tag: String
+    let ports: [PortMappingInput]
+}
+
+// MARK: - Engine errors
+
+struct APIErrorBody: Codable {
+    let error: String
+}
