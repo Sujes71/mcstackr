@@ -125,6 +125,9 @@ struct RequestOpsView: View {
         .onChange(of: state.refreshToken) { _, _ in
             Task { await reload() }
         }
+        .onChange(of: selectedEnv) { _, new in
+            state.setSelectedRequestEnv(new)
+        }
         .onChange(of: state.pendingSectionAction) { _, action in
             guard let action else { return }
             state.pendingSectionAction = nil
@@ -136,6 +139,8 @@ struct RequestOpsView: View {
                 sheetTarget = .folder(folder: nil, url: "")
             case .addRequestEnv:
                 sheetTarget = .newEnv
+            case .deleteRequestEnv:
+                deleteTarget = .env(selectedEnv)
             }
         }
         .sheet(item: $deleteTarget) { target in
@@ -231,45 +236,21 @@ struct RequestOpsView: View {
     private func envRow(_ payload: RequestsResponse) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("REQUEST ENVIRONMENT")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .tracking(1.1)
-                    .foregroundStyle(Theme.textDim)
-
-                Spacer()
-            }
-
-            Menu {
-                ForEach(payload.envs) { env in
-                    Button {
-                        selectedEnv = env.name
-                    } label: {
-                        if env.name == selectedEnv {
-                            Label(env.name, systemImage: "checkmark")
-                        } else {
-                            Text(env.name)
+                Menu {
+                    ForEach(payload.envs) { env in
+                        Button {
+                            selectedEnv = env.name
+                        } label: {
+                            if env.name == selectedEnv {
+                                Label(env.name, systemImage: "checkmark")
+                            } else {
+                                Text(env.name)
+                            }
                         }
                     }
-                }
-
-                Divider()
-
-                Button {
-                    sheetTarget = .newEnv
                 } label: {
-                    Label("New environment…", systemImage: "plus")
-                }
-
-                if let env = payload.envs.first(where: { $0.name == selectedEnv }), env.name != "local" {
-                    Button {
-                        deleteTarget = .env(env.name)
-                    } label: {
-                        Label("Remove environment…", systemImage: "trash")
-                    }
-                }
-            } label: {
-                HStack(spacing: 9) {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    HStack(spacing: 9) {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .fill(Theme.accent.opacity(0.14))
                         .frame(width: 26, height: 26)
                         .overlay {
@@ -295,16 +276,18 @@ struct RequestOpsView: View {
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(Theme.textDim)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Theme.stroke, lineWidth: 1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Theme.stroke, lineWidth: 1)
+                    }
                 }
+                .menuStyle(.borderlessButton)
+                .fixedSize(horizontal: false, vertical: true)
+
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -520,7 +503,7 @@ struct RequestOpsView: View {
             return
         }
         response = loaded
-        state.setRequestFolderCount(loaded.folders.count)
+        state.setSelectedRequestEnv(selectedEnv)
         if !loaded.envs.contains(where: { $0.name == selectedEnv }) {
             selectedEnv = loaded.envs.first?.name ?? ""
         }

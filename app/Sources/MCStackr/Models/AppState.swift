@@ -28,12 +28,12 @@ final class AppState: ObservableObject {
     @Published var section: AppSection = .docker
     /// An action the header asked the current section to run.
     @Published var pendingSectionAction: SectionAction?
-    /// How many folders the request collection has, so the header knows what
-    /// it can offer.
-    @Published private(set) var requestFolderCount = 0
+    /// The request environment in use, so the header knows if it can be
+    /// removed.
+    @Published private(set) var selectedRequestEnv: String = ""
 
-    func setRequestFolderCount(_ count: Int) {
-        requestFolderCount = count
+    func setSelectedRequestEnv(_ name: String) {
+        selectedRequestEnv = name
     }
     /// Bumped on every refresh, so the views reload what they show.
     @Published private(set) var refreshToken = 0

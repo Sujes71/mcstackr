@@ -286,17 +286,16 @@ private struct HeaderView: View {
     @ViewBuilder
     private var requestActions: some View {
         if state.selectedProfile != nil {
-            // The generic add: a request, and the folder it belongs to is
-            // asked in the form. With no folder yet there is nothing to put
-            // it in, so it adds the folder first.
-            if state.requestFolderCount > 0 {
-                ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add request") {
-                    state.pendingSectionAction = .addRequest
+            // Removing an environment belongs to the header, next to the
+            // button that adds one. The local environment cannot be removed.
+            if !state.selectedRequestEnv.isEmpty && state.selectedRequestEnv != "local" {
+                ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Remove the \(state.selectedRequestEnv) environment") {
+                    state.pendingSectionAction = .deleteRequestEnv
                 }
-            } else {
-                ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add folder") {
-                    state.pendingSectionAction = .addRequestFolder
-                }
+            }
+
+            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add request environment") {
+                state.pendingSectionAction = .addRequestEnv
             }
         }
     }

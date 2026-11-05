@@ -347,6 +347,7 @@ enum SectionAction: Equatable {
     case addRequest
     case addRequestFolder
     case addRequestEnv
+    case deleteRequestEnv
 }
 
 enum AppSection: String, CaseIterable, Identifiable {
