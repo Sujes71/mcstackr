@@ -94,17 +94,14 @@ struct WorkspaceSettingsView: View {
         .task {
             description = state.selectedProfile?.description ?? ""
         }
-        .confirmationDialog(
-            "Delete \(state.workspaceName)?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete workspace", role: .destructive) {
+        .sheet(isPresented: $confirmDelete) {
+            ConfirmSheet(
+                title: "Delete \(state.workspaceName)?",
+                message: "This stops its containers and removes its config from ~/.stackr. This cannot be undone.",
+                confirmTitle: "Delete"
+            ) {
                 Task { await delete() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This stops its containers and removes its config from ~/.stackr. This cannot be undone.")
         }
     }
 

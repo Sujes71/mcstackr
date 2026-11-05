@@ -434,17 +434,14 @@ struct PortForwardEditorView: View {
         .frame(width: 640, height: 560)
         .background(Theme.background)
         .onAppear { localPort = String(forward.localPort) }
-        .confirmationDialog(
-            "Delete \(forward.name)?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete port-forward", role: .destructive) {
+        .sheet(isPresented: $confirmDelete) {
+            ConfirmSheet(
+                title: "Delete \(forward.name)?",
+                message: "This stops the forward and removes it from \(state.workspaceName).",
+                confirmTitle: "Delete"
+            ) {
                 Task { await delete() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This stops the forward and removes it from \(state.workspaceName).")
         }
     }
 

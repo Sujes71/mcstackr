@@ -58,17 +58,14 @@ struct ServiceEditorView: View {
         .frame(width: 660, height: 680)
         .background(Theme.background)
         .task { await load() }
-        .confirmationDialog(
-            "Delete \(service.name)?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete service", role: .destructive) {
+        .sheet(isPresented: $confirmDelete) {
+            ConfirmSheet(
+                title: "Delete \(service.name)?",
+                message: "This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost.",
+                confirmTitle: "Delete"
+            ) {
                 Task { await delete() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost.")
         }
     }
 

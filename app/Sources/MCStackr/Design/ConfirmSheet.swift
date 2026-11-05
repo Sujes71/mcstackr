@@ -8,7 +8,7 @@ import SwiftUI
 struct ConfirmSheet: View {
     let title: String
     let message: String
-    let confirmTitle: String
+    var confirmTitle: String = "Delete"
     var destructive: Bool = true
     let onConfirm: () -> Void
 
@@ -22,7 +22,8 @@ struct ConfirmSheet: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 480, height: 250)
+        .frame(minWidth: 300, idealWidth: 460, maxWidth: 520)
+        .frame(minHeight: 210, idealHeight: 240)
         .background(Theme.background)
     }
 
@@ -85,6 +86,7 @@ struct ConfirmSheet: View {
                 dismiss()
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
     }

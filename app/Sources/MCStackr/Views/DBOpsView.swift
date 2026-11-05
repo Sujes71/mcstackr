@@ -56,9 +56,9 @@ struct DBOpsView: View {
 
         var confirmTitle: String {
             switch self {
-            case .action(let action): return "Run \(action.label.lowercased())"
-            case .customAction(_, let action, _): return "Run action"
-            case .deleteCustomAction: return "Delete action"
+            case .action: return "Run"
+            case .customAction: return "Run"
+            case .deleteCustomAction: return "Delete"
             }
         }
 

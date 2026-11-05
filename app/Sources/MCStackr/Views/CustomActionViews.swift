@@ -70,7 +70,7 @@ struct CustomActionWizard: View {
             ConfirmSheet(
                 title: "Delete action “\(existing?.name ?? "")”?",
                 message: "This removes the action from the sync environment. It does not touch the database.",
-                confirmTitle: "Delete action"
+                confirmTitle: "Delete"
             ) {
                 Task { await deleteAction() }
             }

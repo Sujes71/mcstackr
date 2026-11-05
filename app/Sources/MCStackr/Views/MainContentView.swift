@@ -34,14 +34,6 @@ struct MainContentView: View {
             }
         }
 
-        var confirmTitle: String {
-            switch self {
-            case .service: return "Delete service"
-            case .process: return "Delete process"
-            case .forward: return "Delete forward"
-            }
-        }
-
         var message: String {
             switch self {
             case .service(let service):
@@ -90,7 +82,7 @@ struct MainContentView: View {
             ConfirmSheet(
                 title: target.title,
                 message: target.message,
-                confirmTitle: target.confirmTitle
+                confirmTitle: "Delete"
             ) {
                 Task { await performDelete(target) }
             }

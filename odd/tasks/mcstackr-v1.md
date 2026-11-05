@@ -128,16 +128,27 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   `SEARCH` for elasticsearch/opensearch/solr, `CACHE` for
   redis/valkey/memcached, and `PROCESS` for host commands. Unknown images show
   no badge.
-- **S47** — Every confirmation in the app is a window of the app, never a
-  system popover. `ConfirmSheet` is the single confirmation surface: the same
-  header, the same `x` close, the same footer buttons as every other sheet, a
-  red destructive button on the left and `Cancel` on the right. It is used by
-  every delete in the app — service, local process, port-forward, sync
-  environment and custom action — and by the destructive DB operations
-  (truncate, import schema, import data) and by custom action runs. The
-  system `confirmationDialog` is not used anywhere: on macOS it renders as a
-  popover anchored to the control that opened it, which does not match the
-  app's windows and reads as a different application.
+- **S47** — One delete format in the whole app. `ConfirmSheet` is the single
+  confirmation surface: a window of the app, with the same header, the same
+  `x` close and the same footer as every other sheet — a red destructive
+  `Delete` on the left and `Cancel` on the right, always on the same row.
+  The title names the target ("Delete Globick?", "Delete service “pg”?") so
+  the button label stays short. It is used by every delete in the app —
+  service, local process, port-forward, sync environment, custom action,
+  workspace — and by the destructive DB operations (truncate, import schema,
+  import data) and by custom action runs, whose button reads `Run`.
+  The system `confirmationDialog` is not used anywhere: on macOS it renders
+  as a popover anchored to the control that opened it, with its buttons
+  stacked vertically, which does not match the app's windows and reads as a
+  different application.
+- **S48** — The confirmation window does not depend on the width of the sheet
+  that opened it. A sheet presented from inside another sheet is sized by the
+  host, and a 520pt parent produced a 260pt confirmation whose footer
+  wrapped: the delete button ended up above the cancel, exactly the layout
+  the standard forbids. `ConfirmSheet` therefore has no fixed width (300pt
+  minimum, 460pt ideal, 520pt maximum), its footer row is fixed-size so the
+  buttons never wrap, and the destructive label is short enough to fit the
+  narrowest host.
 - **S46** — Each sync environment carries its own custom actions, listed in
   the `Actions` group below truncate: name plus command, with run, edit and
   delete affordances and an `Add action` row. Adding and editing open a sheet
@@ -242,6 +253,7 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T48 — Confirmation window independent of the host width: dropped the fixed 480pt frame for a 300/460/520pt range, made the footer row fixed-size so the two buttons can never stack, and shortened the destructive label to `Delete` (the title names the target) and `Run` for action confirmations. Evidence: in the 520pt Workspace settings sheet the confirmation previously opened at 260x188 with the buttons stacked at x=747 (y=550 and y=584); after the change it opens at 470x210 with the buttons side by side at x=648 and x=760, same y=583; the app has zero `confirmationDialog` and zero `.alert`; `swift build`, bundle rebuild and boot clean.
 - [x] T47 — Standard confirmation window: new `ConfirmSheet` component in the app's chrome (header with warning icon and `x` close, message, footer with a red destructive button on the left and `Cancel` on the right), replacing every system `confirmationDialog`: service, local process and port-forward deletes in `MainContentView` (one `DeleteTarget` enum), sync-environment delete in `SyncEnvWizard`, custom-action delete in `CustomActionWizard`, and the DB operations confirmations in `DBOpsView` (truncate, import, custom action run, custom action delete). Evidence: the app contains no `confirmationDialog` and no `.alert`; nested presentation works — a harness confirmed that a sheet can present another sheet (main → sheet → sheet → sheet, three levels), which is the path used when the sync-environment wizard confirms its own delete; `swift build`, bundle rebuild and boot clean.
 - [x] T46 — Custom actions: engine `custom-actions` CRUD on a sync environment plus `POST /dbops/custom/{action}` (param substitution, auto variables with decrypted password, client auto-wrap, `docker exec -i … sh -c`, 60s timeout, Oracle via `OracleExecSQL`); `customActions` added to the DB ops DTO; Swift `CustomActionWizard` and `CustomActionParamsView`, rows under truncate in the `Actions` group with run/edit/delete and `Add action`. Evidence: on an isolated postgres profile `SELECT count(*) FROM information_schema.tables;` was auto-wrapped into psql and returned 209; `SELECT {n} AS n;` with `params {"n":"42"}` returned 42, without it 400 `missing values for n`; `sh -c "echo hola"` ran verbatim (no wrap); duplicate name 400, empty command 400, unknown sync env 404, rename works, rename collision 400, update/delete unknown 404, unknown action on run 404; `go build`/`go vet`/`swift build`/bundle/boot clean.
 - [x] T45 — DB ops corrections from review: group `Maintenance` renamed to `Actions`, Done button removed, tool images ensured (pull inside the job) before export, wizard prefills the tool image with the service image, sync-env delete moved to the wizard footer as a destructive button with confirmation. Evidence: export-data with an absent `postgres:13-alpine` tool image pulled it inside the job and then failed only on the real version mismatch (pg_dump 13 vs server 16), proving the pull path; group order is Export/Import/Actions; `go build`/`go vet`/`swift build`/bundle/boot clean.

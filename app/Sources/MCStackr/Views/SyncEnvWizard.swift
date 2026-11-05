@@ -63,7 +63,7 @@ struct SyncEnvWizard: View {
             ConfirmSheet(
                 title: "Delete sync environment “\(existing?.name ?? "")”?",
                 message: "This removes it from the config. Its dumps stay on disk.",
-                confirmTitle: "Delete environment"
+                confirmTitle: "Delete"
             ) {
                 Task { await deleteEnv() }
             }
