@@ -145,10 +145,11 @@ func (s *Server) handleQueueOps(w http.ResponseWriter, r *http.Request) {
 
 		// The local queue is always the first one, then the remote ones.
 		envs := []queueEnvDTO{{
-			Name:      "(local)",
-			QueueType: queueType,
-			Host:      "localhost",
-			IsLocal:   true,
+			Name:          "(local)",
+			QueueType:     queueType,
+			Host:          "localhost",
+			CustomActions: make([]queueCustomDTO, 0),
+			IsLocal:       true,
 		}}
 		for _, qse := range svc.QueueSyncEnvs {
 			env := queueEnvDTO{
@@ -893,10 +894,11 @@ func (s *Server) writeQueueOps(w http.ResponseWriter, profileName, envName, serv
 		running, _ := docker.QueueContainerRunning(container)
 
 		envs := []queueEnvDTO{{
-			Name:      "(local)",
-			QueueType: queueType,
-			Host:      "localhost",
-			IsLocal:   true,
+			Name:          "(local)",
+			QueueType:     queueType,
+			Host:          "localhost",
+			CustomActions: make([]queueCustomDTO, 0),
+			IsLocal:       true,
 		}}
 		for _, qse := range svc.QueueSyncEnvs {
 			env := queueEnvDTO{

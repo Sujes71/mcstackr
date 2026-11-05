@@ -21,17 +21,24 @@ echo "==> building SwiftUI app ($CONFIG)"
 )
 BIN_DIR="$(cd "$ROOT/app" && swift build -c "$CONFIG" --show-bin-path)"
 
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_DIR/MCStackr" "$APP/Contents/MacOS/MCStackr"
-cp "$BUILD/mcstackr-engine" "$APP/Contents/MacOS/mcstackr-engine"
-cp "$ROOT/app/Resources/Info.plist" "$APP/Contents/Info.plist"
-printf 'APPL????' > "$APP/Contents/PkgInfo"
+# The bundle is built in a staging folder and swapped at the end, so an
+# interrupted build never leaves a half built app behind.
+STAGE="$BUILD/.MCStackr.stage"
+rm -rf "$STAGE"
+mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
+cp "$BIN_DIR/MCStackr" "$STAGE/Contents/MacOS/MCStackr"
+cp "$BUILD/mcstackr-engine" "$STAGE/Contents/MacOS/mcstackr-engine"
+cp "$ROOT/app/Resources/Info.plist" "$STAGE/Contents/Info.plist"
+printf 'APPL????' > "$STAGE/Contents/PkgInfo"
 
 # Ad-hoc signature so macOS is happy launching a locally built bundle.
 if command -v codesign >/dev/null 2>&1; then
-  codesign --force --sign - --timestamp=none "$APP/Contents/MacOS/mcstackr-engine" >/dev/null 2>&1 || true
-  codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || true
+  codesign --force --sign - --timestamp=none "$STAGE/Contents/MacOS/mcstackr-engine" >/dev/null 2>&1 || true
+  codesign --force --sign - --timestamp=none "$STAGE" >/dev/null 2>&1 || true
 fi
+
+# The bundle is swapped only when everything is ready.
+rm -rf "$APP"
+mv "$STAGE" "$APP"
 
 echo "==> built $APP"

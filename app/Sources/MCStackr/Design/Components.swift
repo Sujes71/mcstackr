@@ -144,6 +144,7 @@ struct ActionIconButton: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .help(help)
+        .accessibilityLabel(help.isEmpty ? systemName : help)
     }
 }
 
@@ -182,6 +183,7 @@ struct ActionTextButton: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel(title)
     }
 
     private var buttonForeground: Color {
