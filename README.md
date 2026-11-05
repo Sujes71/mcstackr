@@ -113,7 +113,8 @@ search, add/edit/remove services with prefilled editable defaults (ports, env
 vars, volumes), port-forward discovery + CRUD + start/stop with live state,
 local-process management (start/stop/add/delete, orphan recovery), DB
 operations (sync-environment wizard, schema/data export and import, truncate)
-as background jobs, shared config, engine lifecycle.
+as background jobs (tool images pulled on demand), shared config, engine
+lifecycle.
 
 Next slices: Kubernetes resource manager (deployments), queues, MockServer,
 request collections, git operations.

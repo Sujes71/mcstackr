@@ -127,6 +127,17 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   `SEARCH` for elasticsearch/opensearch/solr, `CACHE` for
   redis/valkey/memcached, and `PROCESS` for host commands. Unknown images show
   no badge.
+- **S45** — DB action groups are `Export`, `Import` and `Actions`: truncate
+  lives in `Actions`, and custom actions will be appended there later with the
+  same edit/delete affordances. The DB operations sheet has no Done button; the
+  header `x` is the only close affordance. Export and import resolve their tool
+  image before running: when the image is not present locally the engine pulls
+  it inside the job, so "Unable to find image locally" never reaches the user
+  as a failed export. The sync-environment wizard prefills the tool image with
+  the service's own image, which is already pulled and matches the server
+  version. Deleting a sync environment follows the app's delete standard: a
+  red destructive button in the wizard footer plus the native confirmation
+  dialog, never a header icon.
 - **S44** — Sync environments are created and edited from the app, not by
   hand-editing the shared config. The wizard lives in the DB operations sheet
   and asks for name, host, port, database, user, password, the Mongo auth
@@ -202,6 +213,7 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T45 — DB ops corrections from review: group `Maintenance` renamed to `Actions`, Done button removed, tool images ensured (pull inside the job) before export, wizard prefills the tool image with the service image, sync-env delete moved to the wizard footer as a destructive button with confirmation. Evidence: export-data with an absent `postgres:13-alpine` tool image pulled it inside the job and then failed only on the real version mismatch (pg_dump 13 vs server 16), proving the pull path; group order is Export/Import/Actions; `go build`/`go vet`/`swift build`/bundle/boot clean.
 - [x] T44 — Sync environment wizard: engine `sync-envs` create/update/delete over the shared config (DB type from the service, AES-GCM password via `SetPassword`, unique names, rename support, 404 for unknown profile/env/service/sync env) and the Swift `SyncEnvWizard` sheet reached from the DB operations header (add, edit, delete with confirmation). Evidence: create stores `enc:AES256-GCM:…`; omitted password keeps it, empty clears it; duplicate name 400, bad port 400, missing host/user 400, non-DB service 400, unknown profile/env/sync env 404; real config still parses (Globick mongo `dev`, postgres `local`); `go build`/`go vet`/`swift build`, bundle rebuild and boot clean.
 - [x] T43 — DB operations slice: engine `dbops` endpoints (info, async action jobs, job polling) over the existing `docker.PgDump`/`MongoDump`/`MySqlDump`/`Exec*Restore`/`*Truncate` helpers; Swift `DBOpsView` sheet reached from the `DB` card badge, with sync-env picker, action rows, dump list and job status. Evidence: full round trip on an isolated profile (postgres container, sync env via `host.docker.internal`): export-data → truncate (rows 1→0) → import-data (rows 0→1) → import-schema (reset, rows 0); dump files written under `dumps/<service>/<sync env>`; 400 on missing/unknown action, 404 on unknown sync env and unknown job; `go build`/`go vet`/`swift build` and bundle rebuild pass; app boots clean.
 - [x] T42 — Engine `Service.Kind()` + `kind` in the status DTO; Swift unified card grid, red-off dot, state text removed from service/process/forward rows, category badges. Evidence: `go build`/`go vet` pass; status probe returns `QUEUE`, `DB`, `DB` for activemq/mongo/postgres; `swift build` and bundle rebuild pass; boot smoke clean.
@@ -305,6 +317,16 @@ MockServer, request collections, git operations.
   > en el nav de la izquierda donde esta docker y port forward en docker no veo nada de cuantos hay creado a la derecha y en el otro si decidete o me lo muestras en todos o no me lo muestras. lo ideal es uqe no aparezca nada y solo aparezcan cuando esten running creo
 - **L23 (user request, verbatim):**
   > en docker veo qiue la luz que indica que esta encendido o apagado no es la misma en local que en services pon la de local en todos la roja para off ademas el formato no esta alineado me pones stopped al lado del localproces lo cual es estupido porque la luz me lo dice ya lo mismo con los services para que quiero ver el running si ya tengo la luz que indica el estado encima. Otra cosa en los services es que me pones una especie de etiqueta arriba a al derecha del contenedor que pone por ejemplo (MONGO) al lado el titulo que ya de normal si es una mongo será mongo. encima en la activemq no pones eso asi que mejor ahi pondremos simplemente lo que es , si es una mongo postgre u otra base de datos BD, si es activemq kafka etc.. QUEUE si es un mockserver pues lo que sea elasticsearch pues lo que corresponda o sea indicaremos el tipo mas que quje es porque puede resultar redundante. en forward lo mism que ne local process quita lo de stopped en pequeño con la luz es suficiente. En docker otra cosa veo que me pusiste una seccion para local proceses pero no veo la seccion de services encima el formato de como se ven es muy diferente deberian ser similares no? o quizas no deberiamos separarlos en sercciones no lo se.. no lo termino de ver claro.
+- **L29 (user request, verbatim):**
+  > En vez de mantenance que sean Actions dado que las custom actions se añadirán debajo del truncate y estas serán eliminables o editables porque son custom pero al final iguyal que truncate es una action. ademas en el db operations elimina el boton done para que ? no teine sentido si tengo la x arriba para cerrarlo. ademas el export data falla me sale algo de unable to find image locally no se que eso no tiene sentido fijate en como funciona en stackr porque ahi nunca hay probelmas para exportar. cuando quiero eliminar un env no sigue el estandar y formato de los otros delete de la app. y demomento no vi nada mas
+- **L30 (decision):** `unable to find image locally` was the tool-image pull, not
+  the dump: a sync env created without `tool_image` falls back to the default
+  (`postgres:17`), which was never pulled, and Docker's pull failed or was too
+  slow inside the job. Stackr never showed it because its wizard prefills the
+  tool image with the service's own image. Fix both ends: `docker.EnsureImage`
+  pulls inside the job before the dump, and the wizard prefills the service
+  image. The version mismatch the probe surfaced (pg_dump 13 vs server 16) is
+  why the default must never silently point at an older major.
 - **L27 (user request, verbatim):**
   > sigue con el wizard
 - **L28 (decision):** the wizard is a single form, not the TUI's three steps:

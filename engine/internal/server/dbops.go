@@ -263,7 +263,7 @@ func dbActions(dbType string, daemon, running bool, dumps []dbDumpDTO) []dbActio
 		Destructive: true,
 	})
 	actions = append(actions, dbActionDTO{
-		ID: "truncate", Label: "Truncate tables", Group: "Maintenance",
+		ID: "truncate", Label: "Truncate tables", Group: "Actions",
 		Enabled: running, DisabledReason: containerReason,
 		Destructive: true,
 	})
@@ -437,6 +437,19 @@ func (s *Server) handleDBJob(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, job)
 }
 
+// usesToolImage reports whether the action runs a one-shot tool container
+// instead of executing inside the service container.
+func usesToolImage(action, dbType string) bool {
+	switch action {
+	case "export-schema", "export-data":
+		return true
+	case "import-data":
+		return dbType == "mssql"
+	default:
+		return false
+	}
+}
+
 func validateDBOp(action, dbType string) error {
 	switch action {
 	case "export-schema":
@@ -457,6 +470,12 @@ func validateDBOp(action, dbType string) error {
 func runDBOp(profileName, envName string, svc config.Service, se config.SyncEnv, action string) (string, error) {
 	dumpDir := se.DumpDir(profileName, envName, svc.Name)
 	dbType := svc.DBType()
+
+	if usesToolImage(action, dbType) {
+		if err := docker.EnsureImage(docker.ToolImage(&se)); err != nil {
+			return "", fmt.Errorf("prepare tool image: %w", err)
+		}
+	}
 
 	switch action {
 	case "export-schema":

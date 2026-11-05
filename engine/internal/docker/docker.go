@@ -312,6 +312,25 @@ func DownVolumes(profileName, envName string) error {
 	return runDocker(composeArgs(profileName, envName, "down", "-v")...)
 }
 
+// EnsureImage makes sure the image exists locally, pulling it when it does not.
+// DB operations run one-shot tool containers (pg_dump, mongodump, …) and Docker
+// would otherwise fail with "Unable to find image locally" when the pull is not
+// possible or when the default tool tag was never used before.
+func EnsureImage(image string) error {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return fmt.Errorf("tool image is not configured")
+	}
+	if exec.Command("docker", "image", "inspect", image).Run() == nil {
+		return nil
+	}
+	out, err := exec.Command("docker", "pull", image).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("pull %s: %s", image, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 func ComposePull(profileName, envName, service string) error {
 	return runDocker(composeArgs(profileName, envName, "pull", service)...)
 }

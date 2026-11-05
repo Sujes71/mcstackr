@@ -10,6 +10,7 @@ struct SyncEnvWizard: View {
     let dbType: String
     let existing: DBSyncEnv?
     let onSaved: (DBOpsInfo, String) -> Void
+    let onDeleted: (DBOpsInfo) -> Void
 
     @State private var name = ""
     @State private var host = ""
@@ -21,6 +22,7 @@ struct SyncEnvWizard: View {
     @State private var toolImage = ""
     @State private var passwordDirty = false
     @State private var isSaving = false
+    @State private var confirmDelete = false
     @State private var localError: String?
     @State private var loaded = false
 
@@ -57,6 +59,18 @@ struct SyncEnvWizard: View {
         .frame(width: 640, height: 640)
         .background(Theme.background)
         .onAppear(perform: prefill)
+        .confirmationDialog(
+            "Delete sync environment “\(existing?.name ?? "")”?",
+            isPresented: $confirmDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                Task { await deleteEnv() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes it from the config. Its dumps stay on disk.")
+        }
     }
 
     // MARK: Chrome
@@ -88,9 +102,16 @@ struct SyncEnvWizard: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text("The password is encrypted in ~/.stackr/config.yaml.")
-                .font(.system(size: 10, design: .rounded))
-                .foregroundStyle(Theme.textDim)
+            if isEdit {
+                ActionTextButton(title: "Delete sync environment", systemName: "trash", destructive: true) {
+                    confirmDelete = true
+                }
+                .disabled(isSaving)
+            } else {
+                Text("The password is encrypted in ~/.stackr/config.yaml.")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundStyle(Theme.textDim)
+            }
 
             Spacer()
 
@@ -212,7 +233,21 @@ struct SyncEnvWizard: View {
             toolImage = existing.toolImage == defaultToolImage ? "" : existing.toolImage
         } else {
             port = defaultPort
+            toolImage = service.fullImage
         }
+    }
+
+    private func deleteEnv() async {
+        guard let existing else { return }
+        localError = nil
+        isSaving = true
+        defer { isSaving = false }
+        guard let info = await state.deleteSyncEnv(service: service.name, name: existing.name) else {
+            localError = state.errorMessage ?? "Could not delete the sync environment."
+            return
+        }
+        onDeleted(info)
+        dismiss()
     }
 
     private func save() async {

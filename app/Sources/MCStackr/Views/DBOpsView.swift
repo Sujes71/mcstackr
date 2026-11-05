@@ -24,19 +24,16 @@ struct DBOpsView: View {
 
     private enum Confirm: Identifiable {
         case action(DBAction)
-        case deleteEnv(DBSyncEnv)
 
         var id: String {
             switch self {
             case .action(let action): return "action-\(action.id)"
-            case .deleteEnv(let env): return "delete-\(env.name)"
             }
         }
 
         var title: String {
             switch self {
             case .action(let action): return action.label
-            case .deleteEnv(let env): return "Delete sync environment “\(env.name)”?"
             }
         }
     }
@@ -74,6 +71,9 @@ struct DBOpsView: View {
             ) { updated, savedName in
                 info = updated
                 selectedEnv = savedName
+            } onDeleted: { updated in
+                info = updated
+                selectedEnv = updated.syncEnvs.first?.name ?? ""
             }
             .environmentObject(state)
         }
@@ -91,11 +91,6 @@ struct DBOpsView: View {
                     Button(action.label, role: .destructive) {
                         self.confirm = nil
                         run(action)
-                    }
-                case .deleteEnv(let env):
-                    Button("Delete", role: .destructive) {
-                        self.confirm = nil
-                        Task { await deleteEnv(env) }
                     }
                 }
                 Button("Cancel", role: .cancel) { self.confirm = nil }
@@ -141,11 +136,6 @@ struct DBOpsView: View {
                 .foregroundStyle(Theme.textDim)
                 .lineLimit(1)
 
-            Spacer()
-
-            ActionTextButton(title: "Done", systemName: "checkmark") {
-                dismiss()
-            }
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
@@ -253,9 +243,6 @@ struct DBOpsView: View {
                 if let env = syncEnv {
                     ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit sync environment") {
                         syncEnvTarget = SyncEnvTarget(env: env)
-                    }
-                    ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete sync environment") {
-                        confirm = .deleteEnv(env)
                     }
                 }
             }
@@ -502,20 +489,9 @@ struct DBOpsView: View {
         }
     }
 
-    private func deleteEnv(_ env: DBSyncEnv) async {
-        guard let updated = await state.deleteSyncEnv(service: service.name, name: env.name) else {
-            errorText = state.errorMessage ?? "Could not delete the sync environment."
-            return
-        }
-        info = updated
-        selectedEnv = updated.syncEnvs.first?.name ?? ""
-    }
-
     private func confirmationMessage(for confirm: Confirm?) -> String {
         guard let confirm else { return "" }
         switch confirm {
-        case .deleteEnv(let env):
-            return "This removes “\(env.name)” from the config. Its dumps stay on disk."
         case .action(let action):
             return actionMessage(for: action)
         }
