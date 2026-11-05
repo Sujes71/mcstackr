@@ -227,6 +227,31 @@ func (s *Server) handleRunRequest(w http.ResponseWriter, r *http.Request) {
 		vars[name] = value
 	}
 
+	// Every variable the request and the address of its folder reference has
+	// to have a value, wherever it was written.
+	needed := variableNamesIn([]string{
+		def.Path, def.Body, baseURL,
+	})
+	for _, h := range def.Headers {
+		needed = append(needed, variableNamesIn([]string{h.Key, h.Value})...)
+	}
+	for _, param := range def.Params {
+		needed = append(needed, variableNamesIn([]string{param.Key, param.Value})...)
+	}
+	var missing []string
+	seen := map[string]bool{}
+	for _, name := range needed {
+		if seen[name] || vars[name] != "" {
+			continue
+		}
+		seen[name] = true
+		missing = append(missing, name)
+	}
+	if len(missing) > 0 {
+		writeError(w, http.StatusBadRequest, "missing values for "+strings.Join(missing, ", "))
+		return
+	}
+
 	result, err := runRequestDef(def, baseURL, vars, token)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -284,6 +309,9 @@ func runRequestDef(def config.RequestDef, baseURL string, vars map[string]string
 	if path != "" && !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
+	// The address of the folder can carry variables too, and they are needed
+	// by every request that uses it.
+	baseURL = substituteVars(baseURL, vars, token)
 	fullURL := strings.TrimRight(baseURL, "/") + path
 	fullURL = substituteVars(fullURL, vars, token)
 
@@ -576,13 +604,62 @@ func setEnvBaseURL(p *config.Profile, envName, folderName, url string) error {
 		for j := range p.RequestEnvs[i].BaseURLs {
 			if p.RequestEnvs[i].BaseURLs[j].Name == folderName {
 				p.RequestEnvs[i].BaseURLs[j].URL = url
+				ensureURLVariables(p, envName, url)
 				return nil
 			}
 		}
 		p.RequestEnvs[i].BaseURLs = append(p.RequestEnvs[i].BaseURLs, config.RequestBaseURL{Name: folderName, URL: url})
+		ensureURLVariables(p, envName, url)
 		return nil
 	}
 	return notFoundf("request environment %q not found", envName)
+}
+
+// ensureURLVariables creates in the environment the variables of a folder
+// address. A {variable} in the address of a folder is needed by every request
+// that uses it, so it belongs to the environment as well.
+func ensureURLVariables(p *config.Profile, envName, url string) {
+	names := variableNamesIn([]string{url})
+	if len(names) == 0 {
+		return
+	}
+	for i := range p.RequestEnvs {
+		if p.RequestEnvs[i].Name != envName {
+			continue
+		}
+		for _, name := range names {
+			found := false
+			for _, v := range p.RequestEnvs[i].Variables {
+				if v.Name == name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				p.RequestEnvs[i].Variables = append(
+					p.RequestEnvs[i].Variables,
+					config.RequestEnvVar{Name: name},
+				)
+			}
+		}
+	}
+}
+
+// variableNamesIn returns the variables a list of texts references.
+func variableNamesIn(texts []string) []string {
+	var names []string
+	seen := map[string]bool{}
+	for _, text := range texts {
+		for _, match := range requestVariablePattern.FindAllStringSubmatch(text, -1) {
+			name := match[1]
+			if name == "token" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // ── Requests ─────────────────────────────────────────────────────────────────

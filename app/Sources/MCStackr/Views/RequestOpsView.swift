@@ -122,6 +122,9 @@ struct RequestOpsView: View {
         }
         .scrollIndicators(.hidden)
         .task { await reload() }
+        .onChange(of: state.refreshToken) { _, _ in
+            Task { await reload() }
+        }
         .onChange(of: state.pendingSectionAction) { _, action in
             guard action == .addRequestEnv else { return }
             state.pendingSectionAction = nil
@@ -502,18 +505,23 @@ struct RequestOpsView: View {
         }
     }
 
-    /// The variables the request uses, the ones the environment already has a
-    /// value for are not asked again. The token is never asked: it comes from
-    /// the login request.
+    /// Running a request asks for every variable it uses, the ones the
+    /// request references and the ones the address of its folder references.
+    /// The token is never asked: it comes from the login request.
     private func trigger(_ request: RequestDefinition) {
         guard let env, canRun(request) else { return }
-        let missing = request.missingVariables(in: env)
-        if missing.isEmpty {
+        let names = request.runVariables(folderURL: folderURL(for: request))
+        if names.isEmpty {
             sheetTarget = .run(request)
             Task { await run(request, env: env, values: [:]) }
         } else {
-            sheetTarget = .params(request: request, names: missing)
+            sheetTarget = .params(request: request, names: names)
         }
+    }
+
+    /// The address of the folder a request belongs to, in this environment.
+    private func folderURL(for request: RequestDefinition) -> String {
+        env?.baseUrls.first { $0.name == request.baseUrlName }?.url ?? ""
     }
 
     private func run(_ request: RequestDefinition, env: RequestEnvironment, values: [String: String]) async {
@@ -1435,9 +1443,11 @@ extension RequestDefinition {
         return found
     }
 
-    /// The variables the request needs, with the ones that have no value in
-    /// the environment.
-    func missingVariables(in env: RequestEnvironment) -> [String] {
+    /// The variables a run needs: the ones the request references and the
+    /// ones the address of its folder references. Where they are written does
+    /// not matter: a {variable} in the address of a folder is needed by every
+    /// request that uses it.
+    func runVariables(folderURL: String) -> [String] {
         var names: [String] = []
         for name in variableRefs where !names.contains(name) {
             names.append(name)
@@ -1445,7 +1455,10 @@ extension RequestDefinition {
         for name in placeholders where !names.contains(name) {
             names.append(name)
         }
-        return names.filter { env.value(for: $0).isEmpty }
+        for name in folderURL.variablePlaceholders where name != "token" && !names.contains(name) {
+            names.append(name)
+        }
+        return names
     }
 }
 

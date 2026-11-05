@@ -28,6 +28,8 @@ final class AppState: ObservableObject {
     @Published var section: AppSection = .docker
     /// An action the header asked the current section to run.
     @Published var pendingSectionAction: SectionAction?
+    /// Bumped on every refresh, so the views reload what they show.
+    @Published private(set) var refreshToken = 0
     /// DB operations started from the app. They live in the engine, so they
     /// keep running when the sheet is closed and the user works elsewhere.
     @Published private(set) var dbJobs: [DBJob] = []
@@ -174,7 +176,7 @@ final class AppState: ObservableObject {
         await refreshStatus()
         await refreshDockerDetail()
         await refreshEnvironmentDetail()
-        _ = await fetchRequests()
+        refreshToken += 1
     }
 
     func refreshHealth() async {
