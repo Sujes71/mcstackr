@@ -170,7 +170,7 @@ struct RequestOpsView: View {
                 )
                 .environmentObject(state)
             case .run(let request):
-                RequestRunSheet(request: request, envName: selectedEnv, lastRun: lastRun(of: request)) {
+                RequestRunSheet(request: request, envName: selectedEnv) {
                     Task { await reload() }
                 }
                 .environmentObject(state)
@@ -471,13 +471,6 @@ struct RequestOpsView: View {
     /// variables are filled in. It only needs the folder to have a value.
     private func canRun(_ request: RequestDefinition) -> Bool {
         !folderURL(for: request).isEmpty
-    }
-
-    /// The last execution of a request, the one the engine remembers.
-    private func lastRun(of request: RequestDefinition) -> RequestRun? {
-        response?.runs.first {
-            $0.env == selectedEnv && $0.request == request.name
-        }
     }
 
     /// Whether the request is running right now, wherever its window is.
@@ -1125,8 +1118,6 @@ struct RequestRunSheet: View {
 
     let request: RequestDefinition
     let envName: String
-    /// The last execution the engine remembers, shown below the response.
-    var lastRun: RequestRun? = nil
 
     /// The environment in use, with the variables as they are right now.
     private var env: RequestEnvironment {
@@ -1264,12 +1255,6 @@ struct RequestRunSheet: View {
                                 .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                         }
                     }
-
-                    if let lastRun {
-                        FormSection("Last operation") {
-                            runCard(lastRun)
-                        }
-                    }
                 }
                 .padding(22)
             }
@@ -1365,37 +1350,6 @@ struct RequestRunSheet: View {
             values[name] = env.value(for: name)
         }
         isRunning = state.isRequestRunning(request, env: env.name)
-    }
-
-    /// The last execution, with the same card the operations use.
-    private func runCard(_ run: RequestRun) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: run.isDone ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(run.isDone ? Theme.running : Theme.danger)
-                Text(run.isDone ? "Run finished" : "Run failed")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(run.isDone ? Theme.running : Theme.danger)
-                Spacer()
-            }
-
-            if let output = run.output, !output.isEmpty {
-                Text(output)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let error = run.error, !error.isEmpty {
-                Text(error)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.danger)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle()
     }
 
     /// The run of the window only unlocks when every variable has a value.

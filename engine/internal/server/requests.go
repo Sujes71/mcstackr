@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -55,20 +54,6 @@ type requestsResponse struct {
 	Envs     []requestEnvDTO `json:"envs"`
 	Folders  []string        `json:"folders"`
 	Requests []requestDefDTO `json:"requests"`
-	Runs     []requestRunDTO `json:"runs"`
-}
-
-// requestRunDTO is the last execution of a request. It is kept so the app can
-// show it below the window that ran it, the same way the operations keep
-// theirs.
-type requestRunDTO struct {
-	Key        string `json:"key"`
-	Env        string `json:"env"`
-	Request    string `json:"request"`
-	State      string `json:"state"`
-	Output     string `json:"output,omitempty"`
-	Error      string `json:"error,omitempty"`
-	FinishedAt string `json:"finishedAt,omitempty"`
 }
 
 type requestRunRequest struct {
@@ -101,7 +86,6 @@ func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request) {
 			Envs:     requestEnvsDTO(p.RequestEnvs),
 			Folders:  requestFoldersDTO(p.RequestFolders),
 			Requests: requestDefsDTO(p.RequestDefs),
-			Runs:     s.requestRunsDTO(),
 		}
 		return nil
 	})
@@ -110,19 +94,6 @@ func (s *Server) handleRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
-}
-
-// requestRunsDTO returns the last execution of every request, newest first.
-func (s *Server) requestRunsDTO() []requestRunDTO {
-	runs := make([]requestRunDTO, 0)
-	s.requestRuns.Range(func(key, value any) bool {
-		if run, ok := value.(requestRunDTO); ok {
-			runs = append(runs, run)
-		}
-		return true
-	})
-	sort.Slice(runs, func(i, j int) bool { return runs[i].Key < runs[j].Key })
-	return runs
 }
 
 func requestEnvsDTO(envs []config.RequestEnv) []requestEnvDTO {
@@ -298,12 +269,9 @@ func (s *Server) handleRunRequest(w http.ResponseWriter, r *http.Request) {
 
 	result, err := runRequestDef(ctx, def, baseURL, vars, token)
 	if err != nil {
-		s.rememberRequestRun(req.Env, req.Request, "error", "", err.Error())
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	s.rememberRequestRun(req.Env, req.Request, "done", result.Body, "")
 
 	// A login request stores the token it got back.
 	if result.Token != "" {
@@ -488,24 +456,6 @@ func prettyBody(data []byte) string {
 		return pretty.String()
 	}
 	return string(data)
-}
-
-// rememberRequestRun keeps the last execution of a request.
-func (s *Server) rememberRequestRun(env, request, state, output, failure string) {
-	run := requestRunDTO{
-		Key:     requestRunKey(env, request),
-		Env:     env,
-		Request: request,
-		State:   state,
-		Output:  output,
-		Error:   failure,
-	}
-	if failure != "" {
-		run.FinishedAt = ""
-	} else {
-		run.FinishedAt = time.Now().UTC().Format(time.RFC3339)
-	}
-	s.requestRuns.Store(run.Key, run)
 }
 
 // requestRunKey identifies a run of the collection.
@@ -1084,7 +1034,6 @@ func (s *Server) writeRequests(w http.ResponseWriter, profileName string) {
 			Envs:     requestEnvsDTO(p.RequestEnvs),
 			Folders:  requestFoldersDTO(p.RequestFolders),
 			Requests: requestDefsDTO(p.RequestDefs),
-			Runs:     s.requestRunsDTO(),
 		}
 		return nil
 	})
