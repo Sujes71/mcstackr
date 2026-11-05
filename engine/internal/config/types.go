@@ -147,6 +147,26 @@ func (s Service) QueueType() string {
 	}
 }
 
+// Kind returns the coarse service category shown in the UI badge, or "" when unknown.
+// Supported: DB, QUEUE, MOCK, SEARCH, CACHE.
+func (s Service) Kind() string {
+	img := s.Image
+	switch {
+	case s.DBType() != "":
+		return "DB"
+	case s.QueueType() != "":
+		return "QUEUE"
+	case s.MockType() != "":
+		return "MOCK"
+	case containsFold(img, "elasticsearch") || containsFold(img, "opensearch") || containsFold(img, "solr"):
+		return "SEARCH"
+	case containsFold(img, "redis") || containsFold(img, "valkey") || containsFold(img, "memcached"):
+		return "CACHE"
+	default:
+		return ""
+	}
+}
+
 // MockType returns "mockserver" if the service image is a MockServer, or "" otherwise.
 func (s Service) MockType() string {
 	if containsFold(s.Image, "mockserver") {

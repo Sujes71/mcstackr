@@ -115,6 +115,18 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   opens a single sheet with a **Service / Local process** switch. There is no
   separate add-process button and no second terminal icon. Local processes use
   the same name, command (via `sh -c`) and optional workdir fields.
+- **S41** — Docker renders one card grid: services and local processes share
+  the same card anatomy (dot, name, type badge, mono detail, footer actions) and
+  the same padding and minimum height. There is no separate "LOCAL PROCESSES"
+  section header. The status dot alone conveys state, and every off state
+  (`created`, `not_created`, `exited`, `stopped`, `dead`, `failed`, `error`)
+  is red, so no "RUNNING"/"STOPPED" text is repeated in cards or port-forward
+  rows.
+- **S42** — The card badge names the service *category*, not the image: `DB`
+  for databases, `QUEUE` for kafka/rabbitmq/activemq, `MOCK` for mockserver,
+  `SEARCH` for elasticsearch/opensearch/solr, `CACHE` for
+  redis/valkey/memcached, and `PROCESS` for host commands. Unknown images show
+  no badge.
 - **S40** — Sidebar badges show only what is running: Docker shows the number
   of running services plus local processes, Port Forwards the number of running
   forwards, and nothing at all when the count is zero. The leftover `SOON`
@@ -171,6 +183,7 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T42 — Engine `Service.Kind()` + `kind` in the status DTO; Swift unified card grid, red-off dot, state text removed from service/process/forward rows, category badges. Evidence: `go build`/`go vet` pass; status probe returns `QUEUE`, `DB`, `DB` for activemq/mongo/postgres; `swift build` and bundle rebuild pass; boot smoke clean.
 - [x] T41 — Swift: sidebar badges are running-only (services + local processes, forwards) and the `SOON` label is removed. Evidence: `swift build` passes.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
@@ -269,6 +282,13 @@ MockServer, request collections, git operations.
   > en docker veo el boton add process abajo y luego arriba el icono de una consola que hace lo mismo yo lo que haria seria uitar ambos bnotones y que el + que actualmente te crea un servicio deberia manehjar ambos casos al darle esta en add service pero deberia haber un boton que me cambie entre add service y add process
   >
   > en el nav de la izquierda donde esta docker y port forward en docker no veo nada de cuantos hay creado a la derecha y en el otro si decidete o me lo muestras en todos o no me lo muestras. lo ideal es uqe no aparezca nada y solo aparezcan cuando esten running creo
+- **L23 (user request, verbatim):**
+  > en docker veo qiue la luz que indica que esta encendido o apagado no es la misma en local que en services pon la de local en todos la roja para off ademas el formato no esta alineado me pones stopped al lado del localproces lo cual es estupido porque la luz me lo dice ya lo mismo con los services para que quiero ver el running si ya tengo la luz que indica el estado encima. Otra cosa en los services es que me pones una especie de etiqueta arriba a al derecha del contenedor que pone por ejemplo (MONGO) al lado el titulo que ya de normal si es una mongo será mongo. encima en la activemq no pones eso asi que mejor ahi pondremos simplemente lo que es , si es una mongo postgre u otra base de datos BD, si es activemq kafka etc.. QUEUE si es un mockserver pues lo que sea elasticsearch pues lo que corresponda o sea indicaremos el tipo mas que quje es porque puede resultar redundante. en forward lo mism que ne local process quita lo de stopped en pequeño con la luz es suficiente. En docker otra cosa veo que me pusiste una seccion para local proceses pero no veo la seccion de services encima el formato de como se ven es muy diferente deberian ser similares no? o quizas no deberiamos separarlos en sercciones no lo se.. no lo termino de ver claro.
+- **L24 (decision):** one unified grid — services and local processes are cards
+  with identical anatomy, no section headers. Dot color is the only state
+  signal and every off state is red. Badges now carry the category (`DB`,
+  `QUEUE`, `MOCK`, `SEARCH`, `CACHE`, `PROCESS`), so a `mongo` card reads `DB`
+  and the activemq card reads `QUEUE` instead of being the only one labelled.
 - **L22 (decision):** both notes applied. The add sheet is now one flow with a
   segmented Service / Local process switch in its header; the section button,
   the header terminal icon and the standalone process sheet are gone. Sidebar

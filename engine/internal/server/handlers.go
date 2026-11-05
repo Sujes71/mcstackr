@@ -47,6 +47,7 @@ type serviceStatusDTO struct {
 	Container string `json:"container"`
 	FullImage string `json:"fullImage"`
 	DBType    string `json:"dbType,omitempty"`
+	Kind      string `json:"kind,omitempty"`
 	State     string `json:"state"`
 	Health    string `json:"health,omitempty"`
 	Ports     string `json:"ports,omitempty"`
@@ -517,6 +518,7 @@ func mergeStatuses(profile config.Profile, env config.Environment, statuses []do
 			Container: container,
 			FullImage: svc.FullImage(),
 			DBType:    svc.DBType(),
+			Kind:      svc.Kind(),
 			State:     state,
 			Health:    health,
 			Ports:     ports,

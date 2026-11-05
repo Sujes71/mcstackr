@@ -457,7 +457,6 @@ struct PortForwardEditorView: View {
                         .foregroundStyle(Theme.text)
                         .lineLimit(1)
                     StatusDot(state: forward.state)
-                    TechBadge(text: forward.state.uppercased(), color: stateColor)
                 }
                 Text("\(forward.localPort) → \(forward.remotePort) · \(forward.k8sContext) / \(forward.k8sNamespace)/\(forward.k8sService)")
                     .font(.system(size: 11.5, design: .rounded))
@@ -496,15 +495,6 @@ struct PortForwardEditorView: View {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
-    }
-
-    private var stateColor: Color {
-        switch forward.state.lowercased() {
-        case "running": return Theme.running
-        case "starting": return Theme.warning
-        case "failed": return Theme.danger
-        default: return Theme.textDim
-        }
     }
 
     private var canSave: Bool {

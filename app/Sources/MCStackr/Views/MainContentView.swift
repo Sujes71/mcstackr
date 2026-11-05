@@ -127,30 +127,39 @@ struct MainContentView: View {
                         DockerOfflineBanner()
                     }
 
-                    if !state.services.isEmpty {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 320), spacing: 14)],
-                            spacing: 14
-                        ) {
-                            ForEach(state.services) { service in
-                                ServiceCard(
-                                    service: service,
-                                    isBusy: state.runningAction != nil,
-                                    onOpen: { editingService = service },
-                                    onLogs: {
-                                        logTarget = LogTarget(
-                                            title: "\(service.name) · logs",
-                                            service: service.name
-                                        )
-                                    },
-                                    onDelete: { pendingDelete = service }
-                                )
-                            }
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 320), spacing: 14)],
+                        spacing: 14
+                    ) {
+                        ForEach(state.services) { service in
+                            ServiceCard(
+                                service: service,
+                                isBusy: state.runningAction != nil,
+                                onOpen: { editingService = service },
+                                onLogs: {
+                                    logTarget = LogTarget(
+                                        title: "\(service.name) · logs",
+                                        service: service.name
+                                    )
+                                },
+                                onDelete: { pendingDelete = service }
+                            )
                         }
-                    }
 
-                    if !state.localProcesses.isEmpty {
-                        localProcessesSection
+                        ForEach(state.localProcesses) { process in
+                            LocalProcessCard(
+                                process: process,
+                                isBusy: state.runningAction != nil,
+                                onToggle: {
+                                    if process.isRunning {
+                                        Task { await state.stopLocalProcess(process) }
+                                    } else {
+                                        Task { await state.startLocalProcess(process) }
+                                    }
+                                },
+                                onDelete: { pendingDeleteProcess = process }
+                            )
+                        }
                     }
                 }
                 .padding(24)
@@ -159,29 +168,6 @@ struct MainContentView: View {
         }
     }
 
-    private var localProcessesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("LOCAL PROCESSES")
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(1.1)
-                .foregroundStyle(Theme.textDim)
-
-            ForEach(state.localProcesses) { process in
-                LocalProcessRow(
-                    process: process,
-                    isBusy: state.runningAction != nil,
-                    onToggle: {
-                        if process.isRunning {
-                            Task { await state.stopLocalProcess(process) }
-                        } else {
-                            Task { await state.startLocalProcess(process) }
-                        }
-                    },
-                    onDelete: { pendingDeleteProcess = process }
-                )
-            }
-        }
-    }
 }
 
 private struct LogTarget: Identifiable {
@@ -438,15 +424,6 @@ private struct PortForwardRow: View {
     let onOpen: () -> Void
     let onDelete: () -> Void
 
-    private var stateColor: Color {
-        switch forward.state.lowercased() {
-        case "running": return Theme.running
-        case "starting": return Theme.warning
-        case "failed": return Theme.danger
-        default: return Theme.textDim
-        }
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             StatusDot(state: forward.state)
@@ -458,15 +435,9 @@ private struct PortForwardRow: View {
                 .background(Theme.info.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 7) {
-                    Text(forward.name)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.text)
-                    Text(forward.state.uppercased())
-                        .font(.system(size: 8, weight: .black, design: .rounded))
-                        .tracking(0.8)
-                        .foregroundStyle(stateColor)
-                }
+                Text(forward.name)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
                 Text("\(forward.k8sContext) · \(forward.k8sNamespace)/\(forward.k8sService)")
                     .font(Theme.monoSmall)
                     .foregroundStyle(Theme.textDim)
@@ -592,75 +563,77 @@ private struct EmptyDockerView: View {
 
 // MARK: - Local process row
 
-private struct LocalProcessRow: View {
+private struct LocalProcessCard: View {
     let process: LocalProcessInfo
     let isBusy: Bool
     let onToggle: () -> Void
     let onDelete: () -> Void
 
-    private var stateColor: Color {
-        switch process.state.lowercased() {
-        case "running": return Theme.running
-        case "failed": return Theme.danger
-        default: return Theme.textDim
-        }
-    }
+    @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            StatusDot(state: process.state)
-
-            Image(systemName: "terminal")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.info)
-                .frame(width: 28, height: 28)
-                .background(Theme.info.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 7) {
-                    Text(process.name)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.text)
-                    Text(process.state.uppercased())
-                        .font(.system(size: 8, weight: .black, design: .rounded))
-                        .tracking(0.8)
-                        .foregroundStyle(stateColor)
-                }
-                Text(process.command)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textMuted)
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .center, spacing: 9) {
+                StatusDot(state: process.state)
+                Text(process.name)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
                     .lineLimit(1)
-                if !process.workDir.isEmpty {
-                    Text(process.workDir)
+
+                TechBadge(text: "PROCESS", color: Theme.textMuted)
+
+                Spacer(minLength: 4)
+
+                if let pid = process.pid {
+                    Text("pid \(pid)")
                         .font(Theme.monoSmall)
                         .foregroundStyle(Theme.textDim)
-                        .lineLimit(1)
                 }
             }
 
-            Spacer(minLength: 8)
+            Text(process.command)
+                .font(Theme.mono)
+                .foregroundStyle(Theme.textMuted)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
-            if process.isRunning, let pid = process.pid {
-                Text("pid \(pid)")
+            HStack(spacing: 5) {
+                Image(systemName: "folder")
+                    .font(.system(size: 8, weight: .bold))
+                Text(process.workDir.isEmpty ? "App working directory" : process.workDir)
                     .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
+            .foregroundStyle(Theme.textDim)
 
-            ActionIconButton(
-                systemName: process.isRunning ? "stop.fill" : "play.fill",
-                tint: process.isRunning ? Theme.warning : Theme.running,
-                help: process.isRunning ? "Stop" : "Start"
-            ) {
-                onToggle()
+            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                Spacer()
+
+                ActionIconButton(
+                    systemName: process.isRunning ? "stop.fill" : "play.fill",
+                    tint: process.isRunning ? Theme.danger : Theme.accent,
+                    help: process.isRunning ? "Stop" : "Start"
+                ) {
+                    onToggle()
+                }
+                .disabled(isBusy)
+                .opacity(isBusy ? 0.5 : 1)
             }
-            .disabled(isBusy)
         }
-        .padding(13)
-        .cardStyle()
+        .padding(16)
+        .frame(minHeight: 168)
+        .cardStyle(highlighted: hovering)
+        .contentShape(Rectangle())
         .contextMenu {
             Button(process.isRunning ? "Stop" : "Start") { onToggle() }
             Divider()
             Button("Delete process…", role: .destructive) { onDelete() }
+        }
+        .onHover { value in
+            withAnimation(.easeOut(duration: 0.12)) { hovering = value }
         }
     }
 }
@@ -679,7 +652,7 @@ private struct ServiceCard: View {
     @State private var hovering = false
 
     private var accent: Color {
-        if let db = service.dbType { return dbColor(db) }
+        if let kind = service.kind { return kindColor(kind) }
         return Theme.info
     }
 
@@ -692,8 +665,8 @@ private struct ServiceCard: View {
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
 
-                if let db = service.dbType {
-                    TechBadge(text: db, color: dbColor(db))
+                if let kind = service.kind {
+                    TechBadge(text: kind, color: kindColor(kind))
                 }
 
                 Spacer(minLength: 4)
@@ -720,8 +693,6 @@ private struct ServiceCard: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 8) {
-                StatePill(state: service.state)
-
                 if let health = service.health, !health.isEmpty {
                     TechBadge(text: health, color: health == "healthy" ? Theme.running : Theme.warning)
                 }
@@ -762,6 +733,17 @@ private struct ServiceCard: View {
         .onHover { value in
             withAnimation(.easeOut(duration: 0.12)) { hovering = value }
         }
+    }
+}
+
+func kindColor(_ kind: String) -> Color {
+    switch kind.uppercased() {
+    case "DB": return Theme.info
+    case "QUEUE": return Theme.warning
+    case "MOCK": return Theme.violet
+    case "SEARCH": return Theme.accent
+    case "CACHE": return Theme.running
+    default: return Theme.textMuted
     }
 }
 

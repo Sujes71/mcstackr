@@ -27,6 +27,7 @@ struct ServiceStatus: Codable, Identifiable, Hashable {
     let container: String
     let fullImage: String
     let dbType: String?
+    let kind: String?
     let state: String
     let health: String?
     let ports: String?

@@ -46,7 +46,8 @@ struct StatusDot: View {
         case "running": return Theme.running
         case "restarting", "starting": return Theme.warning
         case "paused": return Theme.info
-        case "dead", "exited", "stopped": return Theme.danger
+        case "dead", "exited", "stopped", "created", "not_created", "failed", "error":
+            return Theme.danger
         default: return Theme.textDim
         }
     }
@@ -78,7 +79,8 @@ struct StatePill: View {
         case "running": return Theme.running
         case "restarting", "starting", "created": return Theme.warning
         case "paused": return Theme.info
-        case "dead", "exited", "stopped": return Theme.danger
+        case "dead", "exited", "stopped", "created", "not_created", "failed", "error":
+            return Theme.danger
         default: return Theme.textDim
         }
     }
