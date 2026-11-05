@@ -9,8 +9,8 @@ struct RequestOpsView: View {
     @State private var selectedEnv: String = ""
     @State private var sheetTarget: SheetTarget?
     @State private var errorText: String?
-    /// The folders the user has collapsed.
-    @State private var collapsed: Set<String> = []
+    /// The folders the user has opened. They all start folded.
+    @State private var expanded: Set<String> = []
 
     private enum SheetTarget: Identifiable {
         case folder(folder: String?, url: String)
@@ -245,24 +245,24 @@ struct RequestOpsView: View {
     private func folderTree(_ folder: String) -> some View {
         let url = env?.baseUrls.first { $0.name == folder }?.url ?? ""
         let items = requests(in: folder)
-        let isCollapsed = collapsed.contains(folder)
+        let isExpanded = expanded.contains(folder)
 
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Button {
-                    if isCollapsed {
-                        collapsed.remove(folder)
+                    if isExpanded {
+                        expanded.remove(folder)
                     } else {
-                        collapsed.insert(folder)
+                        expanded.insert(folder)
                     }
                 } label: {
-                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(Theme.textDim)
                         .frame(width: 14, height: 14)
                 }
                 .buttonStyle(.plain)
-                .help(isCollapsed ? "Expand" : "Collapse")
+                .help(isExpanded ? "Collapse" : "Expand")
 
                 Image(systemName: "folder.fill")
                     .font(.system(size: 12, weight: .semibold))
@@ -303,7 +303,7 @@ struct RequestOpsView: View {
             }
             .padding(.vertical, 2)
 
-            if !isCollapsed {
+            if isExpanded {
                 ForEach(items) { request in
                     requestRow(request)
                 }
