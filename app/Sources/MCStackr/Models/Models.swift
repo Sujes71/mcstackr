@@ -213,6 +213,61 @@ struct LocalProcessInfo: Codable, Identifiable, Hashable {
     var isRunning: Bool { state == "running" }
 }
 
+// MARK: - DB operations
+
+struct DBOpsInfo: Codable {
+    let service: String
+    let dbType: String
+    let running: Bool
+    let syncEnvs: [DBSyncEnv]
+}
+
+struct DBSyncEnv: Codable, Identifiable, Hashable {
+    let name: String
+    let dbType: String
+    let host: String
+    let port: String
+    let database: String
+    let toolImage: String
+    let actions: [DBAction]
+    let dumps: [DBDump]
+
+    var id: String { name }
+}
+
+struct DBAction: Codable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let group: String
+    let enabled: Bool
+    let disabledReason: String?
+    let destructive: Bool?
+}
+
+struct DBDump: Codable, Identifiable, Hashable {
+    let file: String
+    let kind: String
+    let size: Int64
+    let modifiedAt: String
+
+    var id: String { file }
+}
+
+struct DBJob: Codable {
+    let id: String
+    let state: String
+    let output: String?
+    let error: String?
+    let startedAt: String
+    let finishedAt: String?
+
+    var isRunning: Bool { state == "running" }
+}
+
+struct DBJobRequest: Codable {
+    let syncEnv: String
+}
+
 enum AppSection: String, CaseIterable, Identifiable {
     case docker
     case portForward

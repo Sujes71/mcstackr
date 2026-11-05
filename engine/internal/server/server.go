@@ -20,6 +20,7 @@ type Server struct {
 	mux     *http.ServeMux
 	pf      *portForwardManager
 	lp      *localProcessManager
+	dbJobs  *dbJobRegistry
 }
 
 func New(token, version string) (*Server, error) {
@@ -34,6 +35,7 @@ func New(token, version string) (*Server, error) {
 		mux:     http.NewServeMux(),
 		pf:      newPortForwardManager(),
 		lp:      newLocalProcessManager(),
+		dbJobs:  newDBJobRegistry(),
 	}
 	s.routes()
 	return s, nil
@@ -57,6 +59,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services", s.handleAddService)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/services/{service}", s.handleDeleteService)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/actions/{action}", s.handleServiceAction)
+	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}/dbops", s.handleDBOpsInfo)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/dbops/{action}", s.handleDBOp)
+	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}/dbops/jobs/{id}", s.handleDBJob)
 
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/local-processes", s.handleAddLocalProcess)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/local-processes/{name}", s.handleDeleteLocalProcess)

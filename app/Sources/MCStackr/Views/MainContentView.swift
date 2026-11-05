@@ -5,6 +5,7 @@ struct MainContentView: View {
     @EnvironmentObject private var state: AppState
 
     @State private var showAddService = false
+    @State private var dbOpsService: ServiceStatus?
     @State private var pendingDeleteProcess: LocalProcessInfo?
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
@@ -27,6 +28,10 @@ struct MainContentView: View {
         }
         .sheet(item: $logTarget) { target in
             LogsSheet(title: target.title, service: target.service)
+                .environmentObject(state)
+        }
+        .sheet(item: $dbOpsService) { service in
+            DBOpsView(service: service)
                 .environmentObject(state)
         }
         .sheet(item: $editingService) { service in
@@ -142,6 +147,7 @@ struct MainContentView: View {
                                         service: service.name
                                     )
                                 },
+                                onDBOps: { dbOpsService = service },
                                 onDelete: { pendingDelete = service }
                             )
                         }
@@ -647,6 +653,7 @@ private struct ServiceCard: View {
     let isBusy: Bool
     let onOpen: () -> Void
     let onLogs: () -> Void
+    let onDBOps: () -> Void
     let onDelete: () -> Void
 
     @State private var hovering = false
@@ -670,6 +677,15 @@ private struct ServiceCard: View {
                 }
 
                 Spacer(minLength: 4)
+
+                if service.kind == "DB" {
+                    ActionIconButton(
+                        systemName: "cylinder.split.1x2",
+                        tint: Theme.info,
+                        help: "DB operations",
+                        action: onDBOps
+                    )
+                }
 
                 ActionIconButton(systemName: "text.alignleft", tint: accent, help: "View logs", action: onLogs)
             }

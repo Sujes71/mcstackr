@@ -127,6 +127,15 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   `SEARCH` for elasticsearch/opensearch/solr, `CACHE` for
   redis/valkey/memcached, and `PROCESS` for host commands. Unknown images show
   no badge.
+- **S43** — DB services expose DB operations in a sheet: the sync environments
+  declared under `sync_envs` in the shared config, their dumps, and the
+  per-database actions the original runtime supports. Export/import/truncate
+  run as engine background jobs so the UI never blocks; the sheet polls the job
+  and refreshes the dump list when it finishes. Import and truncate require the
+  container to be running; exports need the Docker daemon. Actions that are not
+  available are shown disabled with the reason. Import-schema and truncate ask
+  for confirmation because they destroy local data. No new config shape is
+  introduced: the same `sync_envs` block is read and written.
 - **S40** — Sidebar badges show only what is running: Docker shows the number
   of running services plus local processes, Port Forwards the number of running
   forwards, and nothing at all when the count is zero. The leftover `SOON`
@@ -183,6 +192,7 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T43 — DB operations slice: engine `dbops` endpoints (info, async action jobs, job polling) over the existing `docker.PgDump`/`MongoDump`/`MySqlDump`/`Exec*Restore`/`*Truncate` helpers; Swift `DBOpsView` sheet reached from the `DB` card badge, with sync-env picker, action rows, dump list and job status. Evidence: full round trip on an isolated profile (postgres container, sync env via `host.docker.internal`): export-data → truncate (rows 1→0) → import-data (rows 0→1) → import-schema (reset, rows 0); dump files written under `dumps/<service>/<sync env>`; 400 on missing/unknown action, 404 on unknown sync env and unknown job; `go build`/`go vet`/`swift build` and bundle rebuild pass; app boots clean.
 - [x] T42 — Engine `Service.Kind()` + `kind` in the status DTO; Swift unified card grid, red-off dot, state text removed from service/process/forward rows, category badges. Evidence: `go build`/`go vet` pass; status probe returns `QUEUE`, `DB`, `DB` for activemq/mongo/postgres; `swift build` and bundle rebuild pass; boot smoke clean.
 - [x] T41 — Swift: sidebar badges are running-only (services + local processes, forwards) and the `SOON` label is removed. Evidence: `swift build` passes.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
@@ -284,6 +294,19 @@ MockServer, request collections, git operations.
   > en el nav de la izquierda donde esta docker y port forward en docker no veo nada de cuantos hay creado a la derecha y en el otro si decidete o me lo muestras en todos o no me lo muestras. lo ideal es uqe no aparezca nada y solo aparezcan cuando esten running creo
 - **L23 (user request, verbatim):**
   > en docker veo qiue la luz que indica que esta encendido o apagado no es la misma en local que en services pon la de local en todos la roja para off ademas el formato no esta alineado me pones stopped al lado del localproces lo cual es estupido porque la luz me lo dice ya lo mismo con los services para que quiero ver el running si ya tengo la luz que indica el estado encima. Otra cosa en los services es que me pones una especie de etiqueta arriba a al derecha del contenedor que pone por ejemplo (MONGO) al lado el titulo que ya de normal si es una mongo será mongo. encima en la activemq no pones eso asi que mejor ahi pondremos simplemente lo que es , si es una mongo postgre u otra base de datos BD, si es activemq kafka etc.. QUEUE si es un mockserver pues lo que sea elasticsearch pues lo que corresponda o sea indicaremos el tipo mas que quje es porque puede resultar redundante. en forward lo mism que ne local process quita lo de stopped en pequeño con la luz es suficiente. En docker otra cosa veo que me pusiste una seccion para local proceses pero no veo la seccion de services encima el formato de como se ven es muy diferente deberian ser similares no? o quizas no deberiamos separarlos en sercciones no lo se.. no lo termino de ver claro.
+- **L25 (user request, verbatim):**
+  > ahora si parece correcto dale a lo siguiente
+- **L26 (decision):** the next slice is DB operations, not the Kubernetes
+  manager: EKS cannot be exercised without the VPN, and the config already
+  carries `sync_envs` for the mongo and postgres services. Scope is parity with
+  the TUI's DB ops minus custom functions and the add-sync-env wizard (those
+  stay for the next pass): export schema/data, import schema/data, truncate,
+  with the same tool images, dump layout and `docker exec` restore path. The
+  engine port already contained the docker helpers and AES-GCM password
+  decryption, so the slice is the HTTP job API plus the sheet. Divergence: the
+  TUI runs operations inline with a spinner; the app runs them as background
+  jobs so a long dump never blocks the UI. Verified against a local postgres
+  container; remote sync envs stay unprobed without the VPN.
 - **L24 (decision):** one unified grid — services and local processes are cards
   with identical anatomy, no section headers. Dot color is the only state
   signal and every off state is red. Badges now carry the category (`DB`,

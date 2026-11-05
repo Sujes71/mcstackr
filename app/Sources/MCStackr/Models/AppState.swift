@@ -682,6 +682,44 @@ final class AppState: ObservableObject {
         return success
     }
 
+    // MARK: - DB operations
+
+    func fetchDBOps(service: String) async -> DBOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func runDBOp(service: String, syncEnv: String, action: String) async -> DBJob? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/\(action)",
+                body: DBJobRequest(syncEnv: syncEnv)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func fetchDBJob(service: String, id: String) async -> DBJob? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/jobs/\(id)"
+            )
+        } catch {
+            return nil
+        }
+    }
+
     func deleteLocalProcess(named name: String) async -> Bool {
         guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return false }
         var success = false
