@@ -1319,17 +1319,12 @@ struct RequestRunSheet: View {
 
             Spacer()
 
-            // One button for both: while the request runs it stops it, and
-            // when there is nothing running it closes the window.
-            ActionTextButton(
-                title: "Cancel",
-                systemName: isRunning ? "stop.fill" : nil,
-                destructive: isRunning
-            ) {
-                if isRunning {
+            // There is no cancel when nothing is running: the window is
+            // closed with the cross or the escape, as in the DB operations.
+            // While the request runs, the cancel stops it.
+            if isRunning {
+                ActionTextButton(title: "Cancel", systemName: "stop.fill", destructive: true) {
                     Task { await cancel() }
-                } else {
-                    dismiss()
                 }
             }
 
