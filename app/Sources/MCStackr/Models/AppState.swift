@@ -26,6 +26,8 @@ final class AppState: ObservableObject {
     @Published private(set) var catalog: [CatalogEntry] = []
 
     @Published var section: AppSection = .docker
+    /// An action the header asked the current section to run.
+    @Published var pendingSectionAction: SectionAction?
     /// DB operations started from the app. They live in the engine, so they
     /// keep running when the sheet is closed and the user works elsewhere.
     @Published private(set) var dbJobs: [DBJob] = []
@@ -172,6 +174,7 @@ final class AppState: ObservableObject {
         await refreshStatus()
         await refreshDockerDetail()
         await refreshEnvironmentDetail()
+        _ = await fetchRequests()
     }
 
     func refreshHealth() async {
@@ -693,6 +696,108 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Request operations
+
+    func addFolder(name: String, url: String, env: String) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/folders",
+                body: FolderDraft(name: name, url: url, env: env)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func updateFolder(name: String, originalName: String, url: String, env: String) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.patch(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/folders/\(originalName.pathComponentEncoded)",
+                body: FolderDraft(name: name, url: url, env: env)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteFolder(name: String) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/folders/\(name.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func addRequest(_ draft: RequestDraft) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/items",
+                body: draft
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func updateRequest(_ draft: RequestDraft, originalName: String) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.patch(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/items/\(originalName.pathComponentEncoded)",
+                body: draft
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteRequest(name: String) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/items/\(name.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func addRequestEnv(name: String) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/envs",
+                body: RequestEnvDraft(name: name)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteRequestEnv(name: String) async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/envs/\(name.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
 
     func fetchRequests() async -> RequestsResponse? {
         guard let client, let profileName = selectedProfileName else { return nil }

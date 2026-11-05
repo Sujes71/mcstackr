@@ -242,10 +242,13 @@ private struct HeaderView: View {
                 }
                 .disabled(state.isRefreshing)
 
-                if isDocker {
+                switch state.section {
+                case .docker:
                     dockerActions
-                } else {
+                case .portForward:
                     portForwardActions
+                case .requests:
+                    requestActions
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -276,6 +279,15 @@ private struct HeaderView: View {
                 ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add service or local process") {
                     showAddService = true
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var requestActions: some View {
+        if state.selectedProfile != nil {
+            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add folder") {
+                state.pendingSectionAction = .addRequestFolder
             }
         }
     }

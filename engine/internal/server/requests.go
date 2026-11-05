@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -396,4 +397,526 @@ func prettyBody(data []byte) string {
 		return pretty.String()
 	}
 	return string(data)
+}
+
+// ── Folders (base URLs) ──────────────────────────────────────────────────────
+
+type folderRequest struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Env  string `json:"env"`
+}
+
+// handleAddFolder adds a base URL folder. The folder is global: every
+// request environment gets the entry, and the current one gets the URL.
+func (s *Server) handleAddFolder(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+
+	var req folderRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "folder name is required")
+		return
+	}
+
+	err := s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		for _, f := range p.RequestFolders {
+			if f.Name == req.Name {
+				return fmt.Errorf("folder %q already exists", req.Name)
+			}
+		}
+		p.RequestFolders = append(p.RequestFolders, config.RequestFolder{Name: req.Name})
+		for i := range p.RequestEnvs {
+			p.RequestEnvs[i].BaseURLs = append(p.RequestEnvs[i].BaseURLs, config.RequestBaseURL{Name: req.Name, URL: ""})
+		}
+		if req.Env != "" {
+			if err := setEnvBaseURL(p, req.Env, req.Name, strings.TrimSpace(req.URL)); err != nil {
+				return err
+			}
+		}
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+// handleUpdateFolder renames a folder and sets its URL in the current
+// environment. A rename follows in every environment and in the requests
+// that use it.
+func (s *Server) handleUpdateFolder(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	origName := r.PathValue("folder")
+
+	var req folderRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "folder name is required")
+		return
+	}
+
+	err := s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		idx := -1
+		for i, f := range p.RequestFolders {
+			if f.Name == origName {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return notFoundf("folder %q not found", origName)
+		}
+		if req.Name != origName {
+			for _, f := range p.RequestFolders {
+				if f.Name == req.Name {
+					return fmt.Errorf("folder %q already exists", req.Name)
+				}
+			}
+			p.RequestFolders[idx].Name = req.Name
+			for i := range p.RequestEnvs {
+				for j := range p.RequestEnvs[i].BaseURLs {
+					if p.RequestEnvs[i].BaseURLs[j].Name == origName {
+						p.RequestEnvs[i].BaseURLs[j].Name = req.Name
+					}
+				}
+			}
+			for i := range p.RequestDefs {
+				if p.RequestDefs[i].BaseURLName == origName {
+					p.RequestDefs[i].BaseURLName = req.Name
+				}
+			}
+		}
+		if req.Env != "" {
+			if err := setEnvBaseURL(p, req.Env, req.Name, strings.TrimSpace(req.URL)); err != nil {
+				return err
+			}
+		}
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+// handleDeleteFolder removes a folder and the requests that use it.
+func (s *Server) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	name := r.PathValue("folder")
+
+	err := s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		idx := -1
+		for i, f := range p.RequestFolders {
+			if f.Name == name {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return notFoundf("folder %q not found", name)
+		}
+		p.RequestFolders = append(p.RequestFolders[:idx], p.RequestFolders[idx+1:]...)
+		for i := range p.RequestEnvs {
+			kept := make([]config.RequestBaseURL, 0, len(p.RequestEnvs[i].BaseURLs))
+			for _, bu := range p.RequestEnvs[i].BaseURLs {
+				if bu.Name != name {
+					kept = append(kept, bu)
+				}
+			}
+			p.RequestEnvs[i].BaseURLs = kept
+		}
+		kept := make([]config.RequestDef, 0, len(p.RequestDefs))
+		for _, def := range p.RequestDefs {
+			if def.BaseURLName != name {
+				kept = append(kept, def)
+			}
+		}
+		p.RequestDefs = kept
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+// setEnvBaseURL sets the URL of a base URL inside one request environment.
+func setEnvBaseURL(p *config.Profile, envName, folderName, url string) error {
+	for i := range p.RequestEnvs {
+		if p.RequestEnvs[i].Name != envName {
+			continue
+		}
+		for j := range p.RequestEnvs[i].BaseURLs {
+			if p.RequestEnvs[i].BaseURLs[j].Name == folderName {
+				p.RequestEnvs[i].BaseURLs[j].URL = url
+				return nil
+			}
+		}
+		p.RequestEnvs[i].BaseURLs = append(p.RequestEnvs[i].BaseURLs, config.RequestBaseURL{Name: folderName, URL: url})
+		return nil
+	}
+	return notFoundf("request environment %q not found", envName)
+}
+
+// ── Requests ─────────────────────────────────────────────────────────────────
+
+// requestDefInput is the payload to create or update a request.
+type requestDefInput struct {
+	Env         string         `json:"env"`
+	Name        string         `json:"name"`
+	Method      string         `json:"method"`
+	BaseURLName string         `json:"baseUrlName"`
+	Path        string         `json:"path"`
+	IsLogin     bool           `json:"isLogin"`
+	TokenPath   string         `json:"tokenPath"`
+	Headers     []requestKVDTO `json:"headers"`
+	Params      []requestKVDTO `json:"params"`
+	Body        string         `json:"body"`
+}
+
+func (in requestDefInput) toDef() (config.RequestDef, error) {
+	def := config.RequestDef{
+		Name:        strings.TrimSpace(in.Name),
+		Method:      strings.ToUpper(strings.TrimSpace(in.Method)),
+		BaseURLName: strings.TrimSpace(in.BaseURLName),
+		Path:        strings.TrimSpace(in.Path),
+		IsLogin:     in.IsLogin,
+		TokenPath:   strings.TrimSpace(in.TokenPath),
+		Body:        in.Body,
+	}
+	if def.Name == "" {
+		return def, fmt.Errorf("name is required")
+	}
+	if def.Method == "" {
+		return def, fmt.Errorf("method is required")
+	}
+	if def.BaseURLName == "" {
+		return def, fmt.Errorf("base url is required")
+	}
+	if def.Path == "" {
+		return def, fmt.Errorf("path is required")
+	}
+	if def.IsLogin && def.TokenPath == "" {
+		return def, fmt.Errorf("token path is required when the request is a login")
+	}
+	for _, h := range in.Headers {
+		key := strings.TrimSpace(h.Key)
+		if key == "" {
+			continue
+		}
+		def.Headers = append(def.Headers, config.RequestKV{Key: key, Value: h.Value})
+	}
+	for _, p := range in.Params {
+		key := strings.TrimSpace(p.Key)
+		if key == "" {
+			continue
+		}
+		def.Params = append(def.Params, config.RequestKV{Key: key, Value: p.Value})
+	}
+	return def, nil
+}
+
+// requestVariablePattern matches the {variable} references of a request.
+// The names can carry dashes, like {activity-ids-list}.
+var requestVariablePattern = regexp.MustCompile(`\{([\w-]+)\}`)
+
+// requestVariableNames returns the variables a request references, in the
+// order they appear and without duplicates. The token is not one of them: it
+// comes from the login request.
+func requestVariableNames(def config.RequestDef) []string {
+	texts := []string{def.Path, def.Body}
+	for _, h := range def.Headers {
+		texts = append(texts, h.Key, h.Value)
+	}
+	for _, p := range def.Params {
+		texts = append(texts, p.Key, p.Value)
+	}
+
+	var names []string
+	seen := map[string]bool{}
+	for _, text := range texts {
+		for _, match := range requestVariablePattern.FindAllStringSubmatch(text, -1) {
+			name := match[1]
+			if name == "token" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// ensureRequestVariables creates in the environment the variables the request
+// references. Writing {variable} anywhere in a request is enough: the
+// variable exists from that moment, and it is asked for when the request runs.
+func ensureRequestVariables(p *config.Profile, envName string, def config.RequestDef) {
+	if envName == "" {
+		return
+	}
+	names := requestVariableNames(def)
+	if len(names) == 0 {
+		return
+	}
+	for i := range p.RequestEnvs {
+		if p.RequestEnvs[i].Name != envName {
+			continue
+		}
+		for _, name := range names {
+			found := false
+			for _, v := range p.RequestEnvs[i].Variables {
+				if v.Name == name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				p.RequestEnvs[i].Variables = append(
+					p.RequestEnvs[i].Variables,
+					config.RequestEnvVar{Name: name},
+				)
+			}
+		}
+	}
+}
+
+func (s *Server) handleAddRequestItem(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+
+	var in requestDefInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	def, err := in.toDef()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		for _, d := range p.RequestDefs {
+			if d.Name == def.Name {
+				return fmt.Errorf("request %q already exists", def.Name)
+			}
+		}
+		p.RequestDefs = append(p.RequestDefs, def)
+		ensureRequestVariables(p, in.Env, def)
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+func (s *Server) handleUpdateRequestItem(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	origName := r.PathValue("name")
+
+	var in requestDefInput
+	if err := decodeJSON(r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	def, err := in.toDef()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	err = s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		idx := -1
+		for i, d := range p.RequestDefs {
+			if d.Name == origName {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return notFoundf("request %q not found", origName)
+		}
+		if def.Name != origName {
+			for _, d := range p.RequestDefs {
+				if d.Name == def.Name {
+					return fmt.Errorf("request %q already exists", def.Name)
+				}
+			}
+		}
+		p.RequestDefs[idx] = def
+		ensureRequestVariables(p, in.Env, def)
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+func (s *Server) handleDeleteRequestItem(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	name := r.PathValue("name")
+
+	err := s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		idx := -1
+		for i, d := range p.RequestDefs {
+			if d.Name == name {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return notFoundf("request %q not found", name)
+		}
+		p.RequestDefs = append(p.RequestDefs[:idx], p.RequestDefs[idx+1:]...)
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+// ── Request environments ─────────────────────────────────────────────────────
+
+func (s *Server) handleAddRequestEnv(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	err := s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		for _, env := range p.RequestEnvs {
+			if env.Name == req.Name {
+				return fmt.Errorf("request environment %q already exists", req.Name)
+			}
+		}
+		env := config.RequestEnv{Name: req.Name}
+		// Every folder gets an entry in the new environment.
+		for _, folder := range p.RequestFolders {
+			env.BaseURLs = append(env.BaseURLs, config.RequestBaseURL{Name: folder.Name})
+		}
+		p.RequestEnvs = append(p.RequestEnvs, env)
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+func (s *Server) handleDeleteRequestEnv(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	name := r.PathValue("name")
+
+	err := s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		idx := -1
+		for i, env := range p.RequestEnvs {
+			if env.Name == name {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			return notFoundf("request environment %q not found", name)
+		}
+		if name == "local" {
+			return fmt.Errorf("the local request environment cannot be removed")
+		}
+		p.RequestEnvs = append(p.RequestEnvs[:idx], p.RequestEnvs[idx+1:]...)
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	s.writeRequests(w, profileName)
+}
+
+// writeRequests answers with the refreshed request payload.
+func (s *Server) writeRequests(w http.ResponseWriter, profileName string) {
+	var response requestsResponse
+	err := s.store.View(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
+		}
+		response = requestsResponse{
+			Envs:     requestEnvsDTO(p.RequestEnvs),
+			Folders:  requestFoldersDTO(p.RequestFolders),
+			Requests: requestDefsDTO(p.RequestDefs),
+		}
+		return nil
+	})
+	if err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
 }

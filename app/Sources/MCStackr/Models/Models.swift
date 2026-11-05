@@ -342,6 +342,11 @@ struct SyncEnvDraft: Encodable {
     var toolImage: String
 }
 
+/// An action the header of a section asks that section to run.
+enum SectionAction: Equatable {
+    case addRequestFolder
+}
+
 enum AppSection: String, CaseIterable, Identifiable {
     case docker
     case portForward
@@ -439,6 +444,31 @@ struct RequestsResponse: Codable {
     let envs: [RequestEnvironment]
     let folders: [String]
     let requests: [RequestDefinition]
+}
+
+/// The payload to create or update a request.
+struct RequestDraft: Encodable {
+    var env: String
+    var name: String
+    var method: String
+    var baseUrlName: String
+    var path: String
+    var isLogin: Bool
+    var tokenPath: String
+    var headers: [RequestKV]
+    var params: [RequestKV]
+    var body: String
+}
+
+/// The payload to create or update a base URL folder.
+struct FolderDraft: Encodable {
+    var name: String
+    var url: String
+    var env: String
+}
+
+struct RequestEnvDraft: Encodable {
+    var name: String
 }
 
 struct RequestRunPayload: Encodable {
