@@ -734,6 +734,55 @@ final class AppState: ObservableObject {
         }
     }
 
+    func saveCustomAction(
+        service: String,
+        syncEnv: String,
+        originalName: String?,
+        draft: CustomActionDraft
+    ) async -> DBOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        let base = "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/sync-envs/\(syncEnv.pathComponentEncoded)/custom-actions"
+        do {
+            if let originalName {
+                return try await client.patch("\(base)/\(originalName.pathComponentEncoded)", body: draft)
+            }
+            return try await client.post(base, body: draft)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteCustomAction(service: String, syncEnv: String, name: String) async -> DBOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/sync-envs/\(syncEnv.pathComponentEncoded)/custom-actions/\(name.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func runCustomAction(
+        service: String,
+        syncEnv: String,
+        name: String,
+        params: [String: String]
+    ) async -> DBJob? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/custom/\(name.pathComponentEncoded)",
+                body: CustomActionRunRequest(syncEnv: syncEnv, params: params)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     func deleteSyncEnv(service: String, name: String) async -> DBOpsInfo? {
         guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
         do {

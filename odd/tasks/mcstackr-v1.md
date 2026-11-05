@@ -127,6 +127,24 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   `SEARCH` for elasticsearch/opensearch/solr, `CACHE` for
   redis/valkey/memcached, and `PROCESS` for host commands. Unknown images show
   no badge.
+- **S46** — Each sync environment carries its own custom actions, listed in
+  the `Actions` group below truncate: name plus command, with run, edit and
+  delete affordances and an `Add action` row. Adding and editing open a sheet
+  with a name field and a multiline command editor that lists the available
+  variables; deleting follows the app's delete standard (red destructive button
+  in the sheet footer plus the native confirmation dialog). A custom action
+  runs inside the local service container (`docker exec -i <container> sh -c`)
+  with a 60s timeout, as an engine background job, so output and errors show in
+  the same job card as the built-in actions. `{host}`, `{user}`, `{password}`,
+  `{database}`/`{db}`, `{env}`, `{local_user}`, `{local_pass}`, `{local_db}`,
+  `{se_db}`, `{se_user}` and `{se_password}` are filled by the engine; the
+  password comes from `GetPassword()` so the stored `enc:` value never reaches
+  the command. Any other `{name}` is asked for in a small prompt sheet before
+  running and a run without it is rejected with `missing values for <name>`.
+  A command that does not already start with `psql`, `mysql`, `mongo`,
+  `mongosh`, `sqlcmd`, `sqlplus`, `sh ` or `bash ` is wrapped in the matching
+  client (Oracle goes through `docker.OracleExecSQL`, never a shell string).
+  Running requires the container to be up; edit and delete do not.
 - **S45** — DB action groups are `Export`, `Import` and `Actions`: truncate
   lives in `Actions`, and custom actions will be appended there later with the
   same edit/delete affordances. The DB operations sheet has no Done button; the
@@ -213,6 +231,7 @@ MockServer, request collections, git operations.
 - [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
 - [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [x] T40 — Swift: one `+` opens an add sheet with a Service / Local process switch; removed the section add-process button, the header terminal icon and the standalone process sheet. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T46 — Custom actions: engine `custom-actions` CRUD on a sync environment plus `POST /dbops/custom/{action}` (param substitution, auto variables with decrypted password, client auto-wrap, `docker exec -i … sh -c`, 60s timeout, Oracle via `OracleExecSQL`); `customActions` added to the DB ops DTO; Swift `CustomActionWizard` and `CustomActionParamsView`, rows under truncate in the `Actions` group with run/edit/delete and `Add action`. Evidence: on an isolated postgres profile `SELECT count(*) FROM information_schema.tables;` was auto-wrapped into psql and returned 209; `SELECT {n} AS n;` with `params {"n":"42"}` returned 42, without it 400 `missing values for n`; `sh -c "echo hola"` ran verbatim (no wrap); duplicate name 400, empty command 400, unknown sync env 404, rename works, rename collision 400, update/delete unknown 404, unknown action on run 404; `go build`/`go vet`/`swift build`/bundle/boot clean.
 - [x] T45 — DB ops corrections from review: group `Maintenance` renamed to `Actions`, Done button removed, tool images ensured (pull inside the job) before export, wizard prefills the tool image with the service image, sync-env delete moved to the wizard footer as a destructive button with confirmation. Evidence: export-data with an absent `postgres:13-alpine` tool image pulled it inside the job and then failed only on the real version mismatch (pg_dump 13 vs server 16), proving the pull path; group order is Export/Import/Actions; `go build`/`go vet`/`swift build`/bundle/boot clean.
 - [x] T44 — Sync environment wizard: engine `sync-envs` create/update/delete over the shared config (DB type from the service, AES-GCM password via `SetPassword`, unique names, rename support, 404 for unknown profile/env/service/sync env) and the Swift `SyncEnvWizard` sheet reached from the DB operations header (add, edit, delete with confirmation). Evidence: create stores `enc:AES256-GCM:…`; omitted password keeps it, empty clears it; duplicate name 400, bad port 400, missing host/user 400, non-DB service 400, unknown profile/env/sync env 404; real config still parses (Globick mongo `dev`, postgres `local`); `go build`/`go vet`/`swift build`, bundle rebuild and boot clean.
 - [x] T43 — DB operations slice: engine `dbops` endpoints (info, async action jobs, job polling) over the existing `docker.PgDump`/`MongoDump`/`MySqlDump`/`Exec*Restore`/`*Truncate` helpers; Swift `DBOpsView` sheet reached from the `DB` card badge, with sync-env picker, action rows, dump list and job status. Evidence: full round trip on an isolated profile (postgres container, sync env via `host.docker.internal`): export-data → truncate (rows 1→0) → import-data (rows 0→1) → import-schema (reset, rows 0); dump files written under `dumps/<service>/<sync env>`; 400 on missing/unknown action, 404 on unknown sync env and unknown job; `go build`/`go vet`/`swift build` and bundle rebuild pass; app boots clean.

@@ -13,27 +13,41 @@ struct DBOpsView: View {
     @State private var job: DBJob?
     @State private var jobLabel: String = ""
     @State private var confirm: Confirm?
-    @State private var syncEnvTarget: SyncEnvTarget?
+    @State private var sheetTarget: SheetTarget?
     @State private var errorText: String?
 
-    private struct SyncEnvTarget: Identifiable {
-        let env: DBSyncEnv?
+    private enum SheetTarget: Identifiable {
+        case syncEnv(DBSyncEnv?)
+        case customAction(DBSyncEnv, CustomAction?)
+        case params(DBSyncEnv, CustomAction)
 
-        var id: String { env?.name ?? "__new" }
+        var id: String {
+            switch self {
+            case .syncEnv(let env):
+                return "syncEnv-\(env?.name ?? "__new")"
+            case .customAction(let env, let action):
+                return "customAction-\(env.name)-\(action?.name ?? "__new")"
+            case .params(let env, let action):
+                return "params-\(env.name)-\(action.name)"
+            }
+        }
     }
 
     private enum Confirm: Identifiable {
         case action(DBAction)
+        case customAction(DBSyncEnv, CustomAction, [String: String])
 
         var id: String {
             switch self {
             case .action(let action): return "action-\(action.id)"
+            case .customAction(let env, let action, _): return "custom-\(env.name)-\(action.name)"
             }
         }
 
         var title: String {
             switch self {
             case .action(let action): return action.label
+            case .customAction(_, let action, _): return action.name
             }
         }
     }
@@ -63,19 +77,41 @@ struct DBOpsView: View {
         .frame(width: 660, height: 680)
         .background(Theme.background)
         .task { await reload(selectFirst: true) }
-        .sheet(item: $syncEnvTarget) { target in
-            SyncEnvWizard(
-                service: service,
-                dbType: info?.dbType ?? "",
-                existing: target.env
-            ) { updated, savedName in
-                info = updated
-                selectedEnv = savedName
-            } onDeleted: { updated in
-                info = updated
-                selectedEnv = updated.syncEnvs.first?.name ?? ""
+        .sheet(item: $sheetTarget) { target in
+            switch target {
+            case .syncEnv(let existing):
+                SyncEnvWizard(
+                    service: service,
+                    dbType: info?.dbType ?? "",
+                    existing: existing
+                ) { updated, savedName in
+                    info = updated
+                    selectedEnv = savedName
+                } onDeleted: { updated in
+                    info = updated
+                    selectedEnv = updated.syncEnvs.first?.name ?? ""
+                }
+                .environmentObject(state)
+            case .customAction(let env, let existing):
+                CustomActionWizard(
+                    service: service,
+                    syncEnv: env,
+                    existing: existing
+                ) { updated in
+                    info = updated
+                } onDeleted: { updated in
+                    info = updated
+                }
+                .environmentObject(state)
+            case .params(let env, let action):
+                CustomActionParamsView(
+                    action: action,
+                    params: action.command.customActionParams,
+                    context: "\(service.name) · \(env.name)"
+                ) { values in
+                    runCustom(action, env: env, params: values)
+                }
             }
-            .environmentObject(state)
         }
         .confirmationDialog(
             confirm?.title ?? "",
@@ -91,6 +127,11 @@ struct DBOpsView: View {
                     Button(action.label, role: .destructive) {
                         self.confirm = nil
                         run(action)
+                    }
+                case .customAction(let env, let action, let params):
+                    Button("Run \(action.name)", role: .destructive) {
+                        self.confirm = nil
+                        runCustom(action, env: env, params: params)
                     }
                 }
                 Button("Cancel", role: .cancel) { self.confirm = nil }
@@ -168,7 +209,7 @@ struct DBOpsView: View {
                 .frame(maxWidth: 420)
 
             ActionTextButton(title: "Add sync environment", systemName: "plus", prominent: true) {
-                syncEnvTarget = SyncEnvTarget(env: nil)
+                sheetTarget = .syncEnv(nil)
             }
             .padding(.top, 4)
         }
@@ -191,7 +232,7 @@ struct DBOpsView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 11, weight: .semibold))
-                        Text("Start \(service.name) to import or truncate; exports work while it is stopped.")
+                        Text("Start \(service.name) to import, truncate or run actions; exports work while it is stopped.")
                             .font(.system(size: 11, design: .rounded))
                     }
                     .foregroundStyle(Theme.warning)
@@ -237,12 +278,12 @@ struct DBOpsView: View {
                 }
 
                 ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add sync environment") {
-                    syncEnvTarget = SyncEnvTarget(env: nil)
+                    sheetTarget = .syncEnv(nil)
                 }
 
                 if let env = syncEnv {
                     ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit sync environment") {
-                        syncEnvTarget = SyncEnvTarget(env: env)
+                        sheetTarget = .syncEnv(env)
                     }
                 }
             }
@@ -277,6 +318,9 @@ struct DBOpsView: View {
                 FormSection(group) {
                     ForEach(env.actions.filter { $0.group == group }) { action in
                         actionRow(action)
+                    }
+                    if group == "Actions" {
+                        customActionRows(env)
                     }
                 }
             }
@@ -324,6 +368,70 @@ struct DBOpsView: View {
             }
             .disabled(!action.enabled || isBusy)
             .opacity(!action.enabled || isBusy ? 0.4 : 1)
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func customActionRows(_ env: DBSyncEnv) -> some View {
+        ForEach(env.customActions) { action in
+            customActionRow(action, env: env)
+        }
+
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 26, height: 26)
+                .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            ActionTextButton(title: "Add action", systemName: nil, tint: Theme.textMuted) {
+                sheetTarget = .customAction(env, nil)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func customActionRow(_ action: CustomAction, env: DBSyncEnv) -> some View {
+        let enabled = info?.running == true && !isBusy
+        return HStack(spacing: 10) {
+            Image(systemName: "terminal")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(enabled ? Theme.violet : Theme.textDim)
+                .frame(width: 26, height: 26)
+                .background(
+                    (enabled ? Theme.violet : Theme.textDim).opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(action.name)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(enabled ? Theme.text : Theme.textDim)
+                Text(action.command)
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 8)
+
+            ActionIconButton(systemName: "play.fill", tint: Theme.violet, help: "Run action") {
+                triggerCustom(action, env: env)
+            }
+            .disabled(!enabled)
+            .opacity(enabled ? 1 : 0.4)
+
+            ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit action") {
+                sheetTarget = .customAction(env, action)
+            }
+
+            ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete action") {
+                confirm = .customAction(env, action, [:])
+            }
         }
         .padding(.vertical, 2)
     }
@@ -478,6 +586,37 @@ struct DBOpsView: View {
         }
     }
 
+    private func triggerCustom(_ action: CustomAction, env: DBSyncEnv) {
+        errorText = nil
+        if !action.command.customActionParams.isEmpty {
+            sheetTarget = .params(env, action)
+            return
+        }
+        confirm = .customAction(env, action, [:])
+    }
+
+    private func runCustom(_ action: CustomAction, env: DBSyncEnv, params: [String: String]) {
+        errorText = nil
+        jobLabel = action.name
+        job = DBJob(id: "", state: "running", output: nil, error: nil, startedAt: "", finishedAt: nil)
+        Task { await startCustom(action, env: env, params: params) }
+    }
+
+    private func startCustom(_ action: CustomAction, env: DBSyncEnv, params: [String: String]) async {
+        guard let started = await state.runCustomAction(
+            service: service.name,
+            syncEnv: env.name,
+            name: action.name,
+            params: params
+        ) else {
+            errorText = state.errorMessage ?? "Could not start the action."
+            job = nil
+            return
+        }
+        job = started
+        await poll(started.id, env: env)
+    }
+
     private func reload(selectFirst: Bool) async {
         guard let loaded = await state.fetchDBOps(service: service.name) else {
             errorText = state.errorMessage
@@ -494,6 +633,8 @@ struct DBOpsView: View {
         switch confirm {
         case .action(let action):
             return actionMessage(for: action)
+        case .customAction(let env, let action, _):
+            return "This runs “\(action.command)” inside \(service.name) for \(env.name)."
         }
     }
 

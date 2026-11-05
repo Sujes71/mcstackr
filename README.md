@@ -86,6 +86,10 @@ All routes require `Authorization: Bearer <token>`.
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs` | add a sync environment (password encrypted at rest) |
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs/{name}` | update or rename one; omit `password` to keep it |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs/{name}` | remove one (dumps stay on disk) |
+| POST | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs/{name}/custom-actions` | add a custom action (`name`, `command`) |
+| PATCH | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs/{name}/custom-actions/{action}` | update or rename one |
+| DELETE | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs/{name}/custom-actions/{action}` | remove one |
+| POST | `/api/profiles/{p}/envs/{e}/services/{s}/dbops/custom/{action}` | run a custom action job (`syncEnv`, `params`) |
 | POST | `/api/profiles/{p}/envs/{e}/local-processes` | add a host command |
 | DELETE | `/api/profiles/{p}/envs/{e}/local-processes/{name}` | stop and delete a host command |
 | POST | `/api/profiles/{p}/envs/{e}/local-processes/{name}/actions/{start,stop}` | one host command |

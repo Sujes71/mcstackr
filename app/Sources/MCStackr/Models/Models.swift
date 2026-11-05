@@ -232,9 +232,27 @@ struct DBSyncEnv: Codable, Identifiable, Hashable {
     let authDb: String?
     let toolImage: String
     let actions: [DBAction]
+    let customActions: [CustomAction]
     let dumps: [DBDump]
 
     var id: String { name }
+}
+
+struct CustomAction: Codable, Identifiable, Hashable {
+    let name: String
+    let command: String
+
+    var id: String { name }
+}
+
+struct CustomActionDraft: Encodable {
+    let name: String
+    let command: String
+}
+
+struct CustomActionRunRequest: Encodable {
+    let syncEnv: String
+    let params: [String: String]
 }
 
 struct DBAction: Codable, Identifiable, Hashable {
