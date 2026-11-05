@@ -977,14 +977,13 @@ final class AppState: ObservableObject {
         }
     }
 
-    func runQueueOp(service: String, env: String, action: String, params: [String: String]) async -> String? {
+    func runQueueOp(service: String, env: String, action: String, params: [String: String]) async -> QueueRunResult? {
         guard let client, let profileName = selectedProfileName, let dockerEnv = dockerEnvironment else { return nil }
         do {
-            let result: QueueRunResult = try await client.post(
+            return try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(dockerEnv.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/run",
                 body: QueueRunPayload(env: env, action: action, params: params)
             )
-            return result.output
         } catch {
             errorMessage = error.localizedDescription
             return nil

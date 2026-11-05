@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -49,6 +50,13 @@ type queueOpsResponse struct {
 	Envs      []queueEnvDTO    `json:"envs"`
 	Actions   []queueActionDTO `json:"actions"`
 	Running   bool             `json:"running"`
+}
+
+// queueTableDTO is a table of the result of an operation, so the app can
+// show it as a table instead of a wall of text.
+type queueTableDTO struct {
+	Columns []string   `json:"columns"`
+	Rows    [][]string `json:"rows"`
 }
 
 type queueRunRequest struct {
@@ -291,7 +299,53 @@ func (s *Server) handleQueueOpRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"output": cleanQueueOutput(out)})
+	writeJSON(w, http.StatusOK, queueRunResponse(out, action.id))
+}
+
+// queueRunResponse answers with the output of an operation and, when the
+// output is a table, with its rows parsed.
+func queueRunResponse(out, actionID string) map[string]any {
+	clean := cleanQueueOutput(out)
+	response := map[string]any{"output": clean}
+	if table := parseQueueTable(clean, actionID); table != nil {
+		response["table"] = table
+	}
+	return response
+}
+
+// parseQueueTable reads the table of the destinations that ActiveMQ prints.
+func parseQueueTable(out, actionID string) *queueTableDTO {
+	if actionID != "activemq-list-destinations" {
+		return nil
+	}
+	lines := strings.Split(out, "\n")
+	var table *queueTableDTO
+	for _, line := range lines {
+		fields := splitTableRow(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if fields[0] == "Name" {
+			table = &queueTableDTO{Columns: fields}
+			continue
+		}
+		if table == nil {
+			continue
+		}
+		table.Rows = append(table.Rows, fields)
+	}
+	return table
+}
+
+// splitTableRow splits a row of the table on the runs of spaces.
+func splitTableRow(line string) []string {
+	var fields []string
+	for _, field := range regexp.MustCompile(`\s{2,}`).Split(strings.TrimSpace(line), -1) {
+		if field != "" {
+			fields = append(fields, field)
+		}
+	}
+	return fields
 }
 
 // cleanQueueOutput makes the output of a queue readable: the activemq CLI

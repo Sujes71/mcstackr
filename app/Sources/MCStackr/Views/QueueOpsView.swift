@@ -12,18 +12,19 @@ struct QueueOpsView: View {
     @State private var selectedEnv = ""
     @State private var sheetTarget: SheetTarget?
     @State private var errorText: String?
+    /// The last operation, shown in the sheet like the DB operations do.
+    @State private var lastRun: QueueRunResult?
+    @State private var lastRunLabel: String = ""
 
     private enum SheetTarget: Identifiable {
         case params(QueueAction, [String])
         case env(QueueEnv?)
-        case result(QueueAction, String)
         case customAction(QueueEnv, QueueCustom?)
 
         var id: String {
             switch self {
             case .params(let action, _): return "params-\(action.id)"
             case .env(let env): return "env-\(env?.name ?? "__new")"
-            case .result(let action, _): return "result-\(action.id)"
             case .customAction(let env, let action): return "custom-\(env.name)-\(action?.name ?? "__new")"
             }
         }
@@ -96,8 +97,6 @@ struct QueueOpsView: View {
                     selectedEnv = updated.envs.first?.name ?? ""
                 }
                 .environmentObject(state)
-            case .result(let action, let output):
-                QueueResultSheet(action: action, output: output)
             case .customAction(let env, let existing):
                 QueueCustomWizard(existing: existing) { draft in
                     Task { await saveCustom(env, draft, existing) }
@@ -192,6 +191,12 @@ struct QueueOpsView: View {
                     }
                 }
 
+                if let lastRun {
+                    FormSection("Last operation") {
+                        lastOperation(lastRun)
+                    }
+                }
+
                 if let errorText {
                     Text(errorText)
                         .font(.system(size: 11, design: .rounded))
@@ -206,30 +211,40 @@ struct QueueOpsView: View {
 
     private func envPicker(_ info: QueueOpsInfo) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("QUEUE ENVIRONMENT")
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(1.1)
-                .foregroundStyle(Theme.textDim)
-
             HStack(spacing: 8) {
-                if info.envs.count > 1 {
-                    Picker("Queue environment", selection: $selectedEnv) {
-                        ForEach(info.envs) { env in
-                            Text(env.name).tag(env.name)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                } else if let env = info.envs.first {
-                    Text(env.name)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.text)
-                    Spacer()
+                Text("QUEUE ENVIRONMENT")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .tracking(1.1)
+                    .foregroundStyle(Theme.textDim)
+
+                Spacer()
+
+                if let env {
+                    Text(env.isLocal ? env.name : "\(env.host):\(env.port)")
+                        .font(Theme.monoSmall)
+                        .foregroundStyle(Theme.textMuted)
+                        .lineLimit(1)
                 }
 
                 ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add queue environment") {
                     sheetTarget = .env(nil)
                 }
+
+                if let env, !env.isLocal {
+                    ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit queue environment") {
+                        sheetTarget = .env(env)
+                    }
+                }
+            }
+
+            if info.envs.count > 1 {
+                Picker("Queue environment", selection: $selectedEnv) {
+                    ForEach(info.envs) { env in
+                        Text(env.name).tag(env.name)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
         }
     }
@@ -323,7 +338,7 @@ struct QueueOpsView: View {
 
     private func run(_ action: QueueAction, values: [String: String]) async {
         errorText = nil
-        guard let output = await state.runQueueOp(
+        guard let outcome = await state.runQueueOp(
             service: service.name,
             env: env?.isLocal == true ? "" : selectedEnv,
             action: action.id,
@@ -332,7 +347,80 @@ struct QueueOpsView: View {
             errorText = state.errorMessage ?? "Could not run the operation."
             return
         }
-        sheetTarget = .result(action, output)
+        lastRun = outcome
+        lastRunLabel = action.label
+    }
+
+    /// The last operation: a table when the output is one, the text otherwise.
+    private func lastOperation(_ result: QueueRunResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(lastRunLabel)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+                Spacer()
+                if let table = result.table {
+                    Text("\(table.rows.count) destinations")
+                        .font(Theme.monoSmall)
+                        .foregroundStyle(Theme.textDim)
+                }
+            }
+
+            if let table = result.table {
+                tableView(table)
+            } else {
+                Text(result.output.isEmpty ? "(no output)" : result.output)
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textMuted)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
+    }
+
+    /// The destinations of the queue, as a table: the name and the counts.
+    private func tableView(_ table: QueueTable) -> some View {
+        let shown = ["Name", "Queue Size", "Producer #", "Consumer #", "Enqueue #", "Dequeue #"]
+        let indexes = shown.compactMap { name -> Int? in
+            table.columns.firstIndex(of: name)
+        }
+
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("QUEUE")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(shown.dropFirst(), id: \.self) { column in
+                    Text(column.replacingOccurrences(of: " #", with: "").replacingOccurrences(of: "Queue Size", with: "Size"))
+                        .frame(width: 62, alignment: .trailing)
+                }
+            }
+            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .foregroundStyle(Theme.textDim)
+
+            ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 8) {
+                    Text(indexes.first ?? 0 < row.count ? row[indexes.first ?? 0] : "")
+                        .font(Theme.monoSmall)
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(indexes.first ?? 0 < row.count ? row[indexes.first ?? 0] : "")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(indexes.dropFirst(), id: \.self) { index in
+                        Text(index < row.count ? row[index] : "")
+                            .font(Theme.monoSmall)
+                            .foregroundStyle(Theme.textMuted)
+                            .frame(width: 62, alignment: .trailing)
+                    }
+                }
+            }
+        }
     }
 
     /// The row that adds a custom action, in the same place the DB
