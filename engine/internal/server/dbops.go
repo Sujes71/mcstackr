@@ -27,16 +27,22 @@ type dbOpsInfoResponse struct {
 }
 
 type dbSyncEnvDTO struct {
-	Name      string        `json:"name"`
-	DBType    string        `json:"dbType"`
-	Host      string        `json:"host"`
-	Port      string        `json:"port"`
-	User      string        `json:"user"`
-	Database  string        `json:"database"`
-	AuthDB    string        `json:"authDb,omitempty"`
-	ToolImage string        `json:"toolImage"`
-	Actions   []dbActionDTO `json:"actions"`
-	Dumps     []dbDumpDTO   `json:"dumps"`
+	Name          string              `json:"name"`
+	DBType        string              `json:"dbType"`
+	Host          string              `json:"host"`
+	Port          string              `json:"port"`
+	User          string              `json:"user"`
+	Database      string              `json:"database"`
+	AuthDB        string              `json:"authDb,omitempty"`
+	ToolImage     string              `json:"toolImage"`
+	Actions       []dbActionDTO       `json:"actions"`
+	CustomActions []dbCustomActionDTO `json:"customActions"`
+	Dumps         []dbDumpDTO         `json:"dumps"`
+}
+
+type dbCustomActionDTO struct {
+	Name    string `json:"name"`
+	Command string `json:"command"`
 }
 
 type dbActionDTO struct {
@@ -210,19 +216,28 @@ func (s *Server) dbOpsInfo(profileName, envName, serviceName string) (dbOpsInfoR
 	for _, se := range svc.SyncEnvs {
 		dumps := listDumps(se.DumpDir(profile.Name, env.Name, svc.Name), dbType)
 		info.SyncEnvs = append(info.SyncEnvs, dbSyncEnvDTO{
-			Name:      se.Name,
-			DBType:    se.DBType,
-			Host:      se.Host,
-			Port:      se.Port,
-			User:      se.User,
-			Database:  se.Database,
-			AuthDB:    se.AuthDB,
-			ToolImage: docker.ToolImage(&se),
-			Actions:   dbActions(dbType, daemon, running, dumps),
-			Dumps:     dumps,
+			Name:          se.Name,
+			DBType:        se.DBType,
+			Host:          se.Host,
+			Port:          se.Port,
+			User:          se.User,
+			Database:      se.Database,
+			AuthDB:        se.AuthDB,
+			ToolImage:     docker.ToolImage(&se),
+			Actions:       dbActions(dbType, daemon, running, dumps),
+			CustomActions: customActionsDTO(se),
+			Dumps:         dumps,
 		})
 	}
 	return info, http.StatusOK, nil
+}
+
+func customActionsDTO(se config.SyncEnv) []dbCustomActionDTO {
+	actions := make([]dbCustomActionDTO, 0, len(se.CustomActions))
+	for _, action := range se.CustomActions {
+		actions = append(actions, dbCustomActionDTO{Name: action.Name, Command: action.Command})
+	}
+	return actions
 }
 
 func dbActions(dbType string, daemon, running bool, dumps []dbDumpDTO) []dbActionDTO {
