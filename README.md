@@ -72,13 +72,14 @@ All routes require `Authorization: Bearer <token>`.
 | GET | `/api/profiles/{p}/envs/{e}/status` | merged config + container status |
 | GET | `/api/profiles/{p}/envs/{e}/compose` | generated compose YAML |
 | GET | `/api/profiles/{p}/envs/{e}/logs` | SSE log stream |
-| POST | `/api/profiles/{p}/envs/{e}/actions/{up,down,restart}` | environment lifecycle |
+| POST | `/api/profiles/{p}/envs/{e}/actions/{up,stop,down,restart}` | environment lifecycle |
 | POST | `/api/profiles/{p}/envs/{e}/services` | add a service |
 | GET | `/api/profiles/{p}/envs/{e}/services/{s}` | service config (image, ports, env) |
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
 | GET | `/api/hub/catalog` | curated catalog with default ports, env vars and volume target |
+| GET | `/api/hub/tags?image=&limit=` | recent Docker Hub tags for an image |
 | GET | `/api/hub/search?q=` | Docker Hub search |
 | GET | `/api/images` | local Docker images |
 | POST | `/api/docker/launch` | start Colima / Docker Desktop |

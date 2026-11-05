@@ -62,6 +62,17 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   duplicate bottom `Cancel`. The add-service back step is a bare `<` icon.
 - **S22** — The sidebar shows the full workspace name (no initials) and creation
   caps names at 24 characters, enforced in the UI and by the engine.
+- **S25** — Add service browses recent Docker Hub tags (`GET /api/hub/tags`)
+  and shows them as selectable chips next to the prefilled tag.
+- **S26** — Host-port conflicts are rejected before saving, for add and update,
+  with the Stackr CLI message: a host port used by another service, or twice in
+  the same service, returns 400.
+- **S27** — Deleting a service removes it from the config, removes its container
+  (`compose rm -fs`, while the compose file still knows it) and its named
+  volumes; deleting the last service writes an empty `services: {}` compose file
+  instead of leaving the stale one behind.
+- **S28** — "Stop all" stops containers (`compose stop`) instead of `compose
+  down`, so it no longer removes them.
 - **S24** — All sheets share one shell (header with a single close, divider,
   scrolling body, divider, footer) and the same `FormSection` heading: a
   centered, larger title with hairline rules. New workspace, workspace
@@ -102,6 +113,10 @@ MockServer, request collections, git operations.
 - [x] T23 — Swift: workspace settings sheet with the shared destructive footer; workspace delete removed from the menu; unified delete button in the service editor; single close affordance; bare `<` back in add-service. Evidence: `swift build` passes.
 - [x] T24 — Swift: full workspace name with a 24-character creation limit; AWS renamed to Port Forwards across UI, README and specs. Evidence: `swift build` passes; app boots and loads status + catalog.
 - [x] T25 — Swift: extracted `FormSection` and applied it to every form; New workspace and Workspace settings now use the standard sheet shell. Evidence: `swift build` passes; bundle rebuilt.
+- [x] T26 — Engine: `GET /api/hub/tags`; UI tag chips in the add-service configure step. Evidence: endpoint 200 with recent tags.
+- [x] T27 — Engine: port-conflict validation on add and update. Evidence: duplicate host port 400 with owner, same-service duplicate 400.
+- [x] T28 — Engine: service delete removes container + named volumes; last-service delete writes `services: {}`. Evidence: alpha removed from compose, last delete leaves valid empty compose, `/compose` 200.
+- [x] T29 — Engine + UI: `stop` env action and "Stop all" uses it. Evidence: `actions/stop` 200, compose unchanged.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
 
@@ -149,6 +164,15 @@ MockServer, request collections, git operations.
   > respecto a kubernetes renombralo portforward que se sepa para que sirve al final
   >
   > o algo similar que lo deje clarisimo
+- **L14 (user request, verbatim):**
+  > Vale muy bien, revisa si nos falta algo mas y si esta todo ya perfecto y no nos dejamos ninguna funcionalidad hasta donde vamos que este en stackr pasamos a lo siguiente
+- **L15 (audit outcome):** read-only audit against Stackr found four real gaps
+  in the current slice (tag browsing, port-conflict validation, delete not
+  removing containers/volumes, Stop all using `compose down`) plus one bug
+  found while verifying (deleting the last service left a stale compose file).
+  All five are fixed above. Known deliberate divergences: no env switcher
+  (workspace model), no local-process creation, port-forward runtime state
+  deferred with the Port Forwards slice.
 - **L12 (user feedback, verbatim):**
   > en new workspace misma logca y en generl en todos los formularios hay que estandarizar
 - **L13 (decision):** form standardization: `FormSection` (centered title +

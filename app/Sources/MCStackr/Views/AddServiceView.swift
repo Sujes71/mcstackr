@@ -42,6 +42,10 @@ struct AddServiceView: View {
     @State private var envVars: [EnvVarConfig] = []
     @State private var volumes: [VolumeConfig] = []
 
+    @State private var availableTags: [String] = []
+    @State private var tagsImage = ""
+    @State private var isLoadingTags = false
+
     @State private var isSaving = false
     @State private var localError: String?
 
@@ -303,6 +307,46 @@ struct AddServiceView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                if tagsImage == image, isLoadingTags || !availableTags.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        FieldLabel(text: "Recent tags")
+                        if isLoadingTags {
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.mini).tint(Theme.accent)
+                                Text("Loading tags…")
+                                    .font(.system(size: 10, design: .rounded))
+                                    .foregroundStyle(Theme.textDim)
+                            }
+                        } else {
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 6) {
+                                    ForEach(availableTags, id: \.self) { tagName in
+                                        Button {
+                                            tag = tagName
+                                        } label: {
+                                            Text(tagName)
+                                                .font(Theme.monoSmall)
+                                                .foregroundStyle(tag == tagName ? Theme.accentInk : Theme.textMuted)
+                                                .padding(.horizontal, 9)
+                                                .padding(.vertical, 5)
+                                                .background(
+                                                    tag == tagName ? Theme.accent : Theme.field,
+                                                    in: Capsule()
+                                                )
+                                                .overlay {
+                                                    Capsule()
+                                                        .stroke(tag == tagName ? .clear : Theme.stroke, lineWidth: 1)
+                                                }
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                            .scrollIndicators(.hidden)
+                        }
+                    }
+                }
+
                 ServiceConfigForm(
                     showName: true,
                     nameHint: "Letters, numbers, _, . and - only.",
@@ -372,6 +416,19 @@ struct AddServiceView: View {
         }
 
         step = .configure
+        loadTags(for: trimmedImage)
+    }
+
+    private func loadTags(for imageName: String) {
+        availableTags = []
+        tagsImage = imageName
+        isLoadingTags = true
+        Task {
+            let tags = await state.fetchTags(for: imageName)
+            guard tagsImage == imageName else { return }
+            availableTags = tags
+            isLoadingTags = false
+        }
     }
 
     private func defaultServiceName(_ imageName: String) -> String {

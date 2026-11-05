@@ -410,6 +410,22 @@ final class AppState: ObservableObject {
         }
     }
 
+    func fetchTags(for image: String, limit: Int = 20) async -> [String] {
+        guard let client, !image.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        do {
+            let tags: [HubTag] = try await client.get(
+                "/api/hub/tags",
+                query: [
+                    URLQueryItem(name: "image", value: image),
+                    URLQueryItem(name: "limit", value: String(limit)),
+                ]
+            )
+            return tags.map(\.name)
+        } catch {
+            return []
+        }
+    }
+
     func searchHub(_ query: String) async -> [HubResult] {
         guard let client, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         do {

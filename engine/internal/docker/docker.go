@@ -261,6 +261,11 @@ func Down(profileName, envName string) error {
 	return runDocker(composeArgs(profileName, envName, "down")...)
 }
 
+// StopEnv stops every container of an environment without removing them.
+func StopEnv(profileName, envName string) error {
+	return runDocker(composeArgs(profileName, envName, "stop")...)
+}
+
 func StopService(profileName, envName, serviceName string) error {
 	return runDocker(composeArgs(profileName, envName, "stop", serviceName)...)
 }

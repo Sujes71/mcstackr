@@ -68,7 +68,7 @@ struct ServiceEditorView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes \(service.name) from the workspace config. Running containers and volumes are not deleted.")
+            Text("This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost.")
         }
     }
 

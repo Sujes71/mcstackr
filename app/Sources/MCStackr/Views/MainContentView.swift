@@ -43,7 +43,7 @@ struct MainContentView: View {
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         } message: { service in
-            Text("This removes \(service.name) from the workspace config. Running containers and volumes are not deleted.")
+            Text("This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost.")
         }
     }
 
@@ -178,7 +178,7 @@ private struct HeaderView: View {
                     Task { await state.performEnvAction("restart") }
                 }
                 ActionTextButton(title: "Stop all", systemName: "stop.fill") {
-                    Task { await state.performEnvAction("down") }
+                    Task { await state.performEnvAction("stop") }
                 }
             } else {
                 ActionTextButton(title: "Start all", systemName: "play.fill", prominent: true) {

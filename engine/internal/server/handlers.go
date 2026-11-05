@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -545,6 +546,8 @@ func (s *Server) handleEnvAction(w http.ResponseWriter, r *http.Request) {
 		err = docker.Up(profileName, envName)
 	case "down":
 		err = docker.Down(profileName, envName)
+	case "stop":
+		err = docker.StopEnv(profileName, envName)
 	case "restart":
 		err = docker.RestartEnv(profileName, envName)
 	default:
@@ -648,6 +651,9 @@ func (s *Server) handleAddService(w http.ResponseWriter, r *http.Request) {
 				return fmt.Errorf("service %q already exists", name)
 			}
 		}
+		if err := checkPortConflicts(svc, p.Environments[idx].Services); err != nil {
+			return err
+		}
 		p.Environments[idx].Services = append(p.Environments[idx].Services, svc)
 		p.UpdatedAt = time.Now()
 		updated = *p
@@ -666,8 +672,34 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 	envName := r.PathValue("env")
 	service := r.PathValue("service")
 
+	var removed config.Service
+	err := s.store.View(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return fmt.Errorf("profile %q not found", profileName)
+		}
+		idx := indexOfEnv(*p, envName)
+		if idx < 0 {
+			return fmt.Errorf("environment %q not found in profile %q", envName, profileName)
+		}
+		for _, existing := range p.Environments[idx].Services {
+			if existing.Name == service {
+				removed = existing
+				return nil
+			}
+		}
+		return fmt.Errorf("service %q not found", service)
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	// Remove the container while the compose file still knows the service.
+	_ = docker.RmService(profileName, envName, service)
+
 	var updated config.Profile
-	err := s.store.Update(func(c *config.Config) error {
+	err = s.store.Update(func(c *config.Config) error {
 		p, err := c.DeleteService(profileName, envName, service)
 		if err != nil {
 			return err
@@ -680,7 +712,43 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	if len(removed.Volumes) > 0 {
+		docker.RemoveServiceVolumes(profileName, envName, service)
+	}
+
 	writeJSON(w, http.StatusOK, toProfileDTO(updated))
+}
+
+// checkPortConflicts mirrors the Stackr CLI validation: a host port may not be
+// claimed twice, neither by another service nor twice inside the same service.
+func checkPortConflicts(newService config.Service, existingServices []config.Service) error {
+	hostPorts := make(map[string]string)
+	for _, svc := range existingServices {
+		if svc.Name == newService.Name {
+			continue
+		}
+		for _, p := range svc.Ports {
+			if p.Host != "" {
+				hostPorts[p.Host] = svc.Name
+			}
+		}
+	}
+
+	seen := make(map[string]bool)
+	for _, p := range newService.Ports {
+		if p.Host == "" {
+			continue
+		}
+		if owner, exists := hostPorts[p.Host]; exists {
+			return fmt.Errorf("port %s is already used by %q; choose a different host port", p.Host, owner)
+		}
+		if seen[p.Host] {
+			return fmt.Errorf("port %s is mapped multiple times in the same service", p.Host)
+		}
+		seen[p.Host] = true
+	}
+	return nil
 }
 
 // ── Service config ──────────────────────────────────────────────────────────
@@ -748,9 +816,21 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
 		svc.EnvVars = append(svc.EnvVars, config.EnvVar{Key: key, Value: e.Value})
 	}
 	svc.Volumes = toVolumeMappings(req.Volumes)
+	svc.Name = serviceName
 
 	var updated config.Profile
 	err := s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return fmt.Errorf("profile %q not found", profileName)
+		}
+		idx := indexOfEnv(*p, envName)
+		if idx < 0 {
+			return fmt.Errorf("environment %q not found in profile %q", envName, profileName)
+		}
+		if err := checkPortConflicts(svc, p.Environments[idx].Services); err != nil {
+			return err
+		}
 		p, err := c.UpdateService(profileName, envName, serviceName, svc)
 		if err != nil {
 			return err
@@ -920,6 +1000,21 @@ func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+func (s *Server) handleHubTags(w http.ResponseWriter, r *http.Request) {
+	image := strings.TrimSpace(r.URL.Query().Get("image"))
+	if image == "" {
+		writeError(w, http.StatusBadRequest, "image is required")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	tags, err := hub.FetchTags(image, limit)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, tags)
 }
 
 func (s *Server) handleHubSearch(w http.ResponseWriter, r *http.Request) {

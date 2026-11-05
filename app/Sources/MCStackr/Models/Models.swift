@@ -128,6 +128,12 @@ struct UpdateServiceRequest: Encodable {
     let volumes: [VolumeConfig]
 }
 
+struct HubTag: Decodable, Identifiable, Hashable {
+    let name: String
+
+    var id: String { name }
+}
+
 struct CatalogEntry: Codable, Identifiable, Hashable {
     let name: String
     let image: String
