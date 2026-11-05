@@ -25,10 +25,10 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
 
 - **S10** — Workspace model: a workspace is one Stackr profile and the UI
   exposes no profile or environment concept. The **Docker** section uses the
-  environment named `local`; the **AWS** section uses the first environment
+  environment named `local`; the **Port Forwards** section uses the first environment
   whose name is not `local`. New workspaces create `local` and `dev`.
 - **S11** — Sidebar: brand, workspace dropdown (switch, create, delete), Docker
-  and AWS navigation with running / port-forward counts, Docker status footer.
+  and Port Forwards navigation with running / port-forward counts, Docker status footer.
   Delete asks for confirmation and stops the workspace containers (best effort)
   before removing the profile.
 - **S12** — Docker header actions: `Restart all` + `Stop all` when something is
@@ -41,8 +41,8 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   volumes (secret-looking values masked with a reveal toggle), delete with
   confirmation. Saving regenerates the compose file; changes apply on the next
   restart.
-- **S15** — AWS section: read-only list of port-forwards and local processes for
-  the AWS environment, with an explicit empty state; management lands in the
+- **S15** — Port Forwards section: read-only list of port-forwards and local processes for
+  the port-forward environment, with an explicit empty state; management lands in the
   next slice.
 - **S17** — Add-service flow mirrors Stackr: first choose the image (curated
   catalog, Docker Hub search, or manual), then open the same editable form used
@@ -53,6 +53,18 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   from the service card context menu, both with confirmation.
 - **S19** — Engine: `GET /api/hub/catalog` exposes the curated catalog; create
   and update service requests accept environment variables and volumes.
+- **S20** — One delete pattern everywhere: a red destructive button in the sheet
+  footer (left), a native confirmation dialog, and the same placement in the
+  service editor and in workspace settings. Workspace deletion lives in
+  `Workspace settings…` (description editable via `PATCH /api/profiles/{p}`),
+  not in the workspace menu.
+- **S21** — Sheet chrome: one close affordance per sheet (the header `x`); no
+  duplicate bottom `Cancel`. The add-service back step is a bare `<` icon.
+- **S22** — The sidebar shows the full workspace name (no initials) and creation
+  caps names at 24 characters, enforced in the UI and by the engine.
+- **S23** — The former AWS section is named **Port Forwards**: the original
+  Stackr treats every non-`local` environment as a Kubernetes port-forward
+  environment, so the cloud-specific name was misleading.
 - **S16** — Engine endpoints: `GET /envs/{e}` (environment detail),
   `GET /envs/{e}/services/{s}` (service config),
   `PATCH /envs/{e}/services/{s}` (update + regenerate compose),
@@ -74,14 +86,17 @@ MockServer, request collections, git operations.
 - [x] T9 — Build verification: `go build ./...` and `swift build` pass; app bundle produced.
 - [x] T12 — Engine: `config.UpdateService` preserves volumes, sync envs and healthcheck while replacing image, tag, ports and env vars; regenerates compose. Evidence: `go build ./...`, `go vet ./...`.
 - [x] T13 — Engine: environment detail, service config, service update and profile delete handlers + routes. Evidence: live engine against a temp copy of `~/.stackr`: env detail 200, service 200, PATCH updates tag and env vars, missing service 404, empty image 400, delete profile 204.
-- [x] T14 — Swift: workspace-first sidebar with dropdown (switch/create/delete), Docker/AWS navigation and counts. Evidence: `swift build` passes.
+- [x] T14 — Swift: workspace-first sidebar with dropdown (switch/create/settings/delete), Docker/Port Forwards navigation and counts. Evidence: `swift build` passes.
 - [x] T15 — Swift: Docker header action rules and single-line buttons; service card with one logs affordance and click-to-configure. Evidence: `swift build` passes.
 - [x] T16 — Swift: service editor sheet (image, tag, ports, env vars with masked secrets, delete). Evidence: `swift build` passes.
-- [x] T17 — Swift: AWS section with port-forward/local-process rows and empty state.
+- [x] T17 — Swift: Port Forwards section with port-forward/local-process rows and empty state.
 - [x] T18 — Build and boot verification: `./scripts/build-app.sh` OK; app boots, health/profiles/status 200, 3s polling; engine exits with the app.
 - [x] T19 — Engine: catalog endpoint, env vars + volumes on create/update, volume replacement in `config.UpdateService`. Evidence: catalog returns 11 entries; add redis with defaults persisted ports+volume; PATCH added a bind mount and env var; compose shows both volumes; delete 200.
 - [x] T20 — Swift: shared `ServiceConfigForm` (name, image, tag, ports, env vars, volumes), add-service wizard (Catalog / Docker Hub / Manual → prefilled editable form). Evidence: `swift build` passes.
 - [x] T21 — Swift: destructive delete in the editor and card context menu; destructive button style. Evidence: `swift build` passes; app boots and loads the catalog.
+- [x] T22 — Engine: `PATCH /api/profiles/{p}` for the workspace description; 24-character profile-name limit. Evidence: PATCH 200, long name 400, unknown profile 404.
+- [x] T23 — Swift: workspace settings sheet with the shared destructive footer; workspace delete removed from the menu; unified delete button in the service editor; single close affordance; bare `<` back in add-service. Evidence: `swift build` passes.
+- [x] T24 — Swift: full workspace name with a 24-character creation limit; AWS renamed to Port Forwards across UI, README and specs. Evidence: `swift build` passes; app boots and loads status + catalog.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
 
@@ -119,10 +134,23 @@ MockServer, request collections, git operations.
   and wraps to another line; (4) buttons should be start/stop — when running,
   the primary action should restart directly; (5) remove the environment chips
   (`local`, `dev`) — the gray dot turns yellow and misaligns the text;
-  (6) no profiles at all: just the Docker view and the AWS view; another project
+  (6) no profiles at all: just the Docker view and the Port Forwards view; another project
   is another workspace.
 - **L8 (user feedback, verbatim):**
   > 1- No hay un boton para poder eliminar los servicios de docker. 2- El añadir servicio no se parece al de editar, deberiamos reevaluar el como funciona esto actualmente porque deberia funcionar parecido a como funcionaba en el original de staack r, algo como que primero en dockerhub elegimos la imagen o no y una vez que lo elegimos uqe me abarala parte que es como editar no se... pero esta claro que dependiendo el servicio deberia aparecer las configuraciones por defecto y hacerlas editables como haciamos en stackr esto hay que verlo de nuevo. Luegfo es una duda, sguro qeu AWS es lo que hacemos en stackr original cuando hacemos port forward a los servicios qeu tenemos en k8s ? es un buen naming?
+- **L10 (user feedback, verbatim):**
+  > vale no me gusta el delete, deberiamos tener todos los formularios y botones de delete alineados el delete de workspace es muy distinto al de service, elige un formato chulo y moderno y que todo este alineado. En el configure service no me gusta el boton < change image simplemnte con < creo qeu quedaria mas minimalista y chulo. luego en el add service veo una x arriba para cerrar la ventana y un cancel abajo que hace lo mismo yo quitaria el cancel. y veoque eso lo tienes en create workspace tambien ... Luego en los workspace en vez de poner GL yo pondria entero el nombre del workspace limitado en la creacion para no romper la uix porque no quepa .
+  >
+  > respecto a kubernetes renombralo portforward que se sepa para que sirve al final
+  >
+  > o algo similar que lo deje clarisimo
+- **L11 (decision):** delete is now one pattern: red destructive button on the
+  left of a sheet footer plus a native confirmation, used by the service editor
+  and by the new workspace settings sheet (workspace delete left the dropdown).
+  Every sheet has a single close affordance. The add-service back affordance is
+  a bare `<`. Workspace names show in full and are capped at 24 characters.
+  The AWS section is renamed Port Forwards (Kubernetes port-forwards for every
+  non-`local` environment).
 - **L9 (decision):** add-service now mirrors the original TUI: source
   (catalog/search/manual) → prefilled config form. Defaults live in the Go
   catalog and are exposed through `GET /api/hub/catalog`. Volumes are part of

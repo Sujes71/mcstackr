@@ -26,7 +26,7 @@ final class AppState: ObservableObject {
 
     @Published var section: AppSection = .docker {
         didSet {
-            guard section == .aws else { return }
+            guard section == .portForward else { return }
             Task { await refreshEnvironmentDetail() }
         }
     }
@@ -53,13 +53,13 @@ final class AppState: ObservableObject {
             ?? profile.environments.first
     }
 
-    /// Everything that is not the Docker environment is exposed under AWS.
-    var awsEnvironment: ProfileEnvironment? {
+    /// Every environment that is not `local` is a port-forward (Kubernetes) environment.
+    var portForwardEnvironment: ProfileEnvironment? {
         guard let profile = selectedProfile else { return nil }
         return profile.environments.first { $0.name != "local" }
     }
 
-    var portForwardCount: Int { environmentDetail?.portForwards.count ?? awsEnvironment?.portForwardCount ?? 0 }
+    var portForwardCount: Int { environmentDetail?.portForwards.count ?? portForwardEnvironment?.portForwardCount ?? 0 }
 
     var services: [ServiceStatus] {
         status?.services ?? []
@@ -125,7 +125,7 @@ final class AppState: ObservableObject {
         }
         Task {
             await refreshStatus()
-            if section == .aws {
+            if section == .portForward {
                 await refreshEnvironmentDetail()
             }
         }
@@ -133,7 +133,7 @@ final class AppState: ObservableObject {
 
     func selectSection(_ newSection: AppSection) {
         section = newSection
-        if newSection == .aws {
+        if newSection == .portForward {
             Task { await refreshEnvironmentDetail() }
         }
     }
@@ -185,7 +185,7 @@ final class AppState: ObservableObject {
     func refreshEnvironmentDetail() async {
         guard let client,
               let profileName = selectedProfileName,
-              let env = awsEnvironment else {
+              let env = portForwardEnvironment else {
             environmentDetail = nil
             return
         }
@@ -284,6 +284,21 @@ final class AppState: ObservableObject {
                 select(profile: created)
             }
             await refreshStatus()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func updateWorkspaceDescription(_ description: String) async -> Bool {
+        guard let client, let profileName = selectedProfileName else { return false }
+        do {
+            let _: Profile = try await client.patch(
+                "/api/profiles/\(profileName.pathComponentEncoded)",
+                body: UpdateProfileRequest(description: description)
+            )
+            try await reloadProfiles()
             return true
         } catch {
             errorMessage = error.localizedDescription

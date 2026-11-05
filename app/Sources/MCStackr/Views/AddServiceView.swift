@@ -84,7 +84,7 @@ struct AddServiceView: View {
             Spacer()
 
             if step == .configure {
-                ActionTextButton(title: "Change image", systemName: "chevron.left") {
+                ActionIconButton(systemName: "chevron.left", tint: Theme.textMuted, help: "Change image") {
                     step = .choose
                 }
             }
@@ -330,8 +330,6 @@ struct AddServiceView: View {
             }
 
             Spacer()
-
-            ActionTextButton(title: "Cancel") { dismiss() }
 
             if step == .configure {
                 ActionTextButton(

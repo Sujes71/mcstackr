@@ -4,7 +4,7 @@ struct SidebarView: View {
     @EnvironmentObject private var state: AppState
 
     @State private var showNewWorkspace = false
-    @State private var confirmDelete = false
+    @State private var showSettings = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,17 +36,9 @@ struct SidebarView: View {
             NewWorkspaceView()
                 .environmentObject(state)
         }
-        .confirmationDialog(
-            "Delete workspace?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete \(state.workspaceName)", role: .destructive) {
-                Task { _ = await state.deleteWorkspace() }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This stops its containers and removes its config from ~/.stackr. This cannot be undone.")
+        .sheet(isPresented: $showSettings) {
+            WorkspaceSettingsView()
+                .environmentObject(state)
         }
     }
 
@@ -103,10 +95,10 @@ struct SidebarView: View {
                 Label("New workspace…", systemImage: "plus")
             }
 
-            Button(role: .destructive) {
-                confirmDelete = true
+            Button {
+                showSettings = true
             } label: {
-                Label("Delete workspace…", systemImage: "trash")
+                Label("Workspace settings…", systemImage: "slider.horizontal.3")
             }
             .disabled(state.selectedProfile == nil)
         } label: {
@@ -115,8 +107,8 @@ struct SidebarView: View {
                     .fill(Theme.accent.opacity(0.14))
                     .frame(width: 26, height: 26)
                     .overlay {
-                        Text(initials)
-                            .font(.system(size: 10, weight: .black, design: .rounded))
+                        Image(systemName: "square.stack.3d.up.fill")
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Theme.accent)
                     }
 
@@ -150,15 +142,10 @@ struct SidebarView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var initials: String {
-        let letters = state.workspaceName.prefix(2)
-        return letters.isEmpty ? "—" : letters.uppercased()
-    }
-
     private var nav: some View {
         VStack(spacing: 3) {
             sectionRow(.docker, badge: state.runningCount > 0 ? "\(state.runningCount)" : nil)
-            sectionRow(.aws, badge: state.portForwardCount > 0 ? "\(state.portForwardCount)" : nil)
+            sectionRow(.portForward, badge: state.portForwardCount > 0 ? "\(state.portForwardCount)" : nil)
         }
     }
 
@@ -186,7 +173,7 @@ struct SidebarView: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(selected ? Theme.accent : Theme.field, in: Capsule())
-                } else if section == .aws {
+                } else if section == .portForward {
                     Text("SOON")
                         .font(.system(size: 7.5, weight: .bold, design: .rounded))
                         .tracking(0.8)

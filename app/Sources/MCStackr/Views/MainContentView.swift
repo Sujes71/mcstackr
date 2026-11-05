@@ -51,8 +51,8 @@ struct MainContentView: View {
     private var content: some View {
         if state.selectedProfile == nil {
             NoWorkspaceView()
-        } else if state.section == .aws {
-            AWSView()
+        } else if state.section == .portForward {
+            PortForwardView()
         } else {
             dockerContent
         }
@@ -208,7 +208,7 @@ private struct HeaderView: View {
                 return "\(description) · \(total) services · \(state.runningCount) running"
             }
             return "\(total) services · \(state.runningCount) running"
-        case .aws:
+        case .portForward:
             let forwards = state.portForwardCount
             if let description = profile.description, !description.isEmpty {
                 return "\(description) · \(forwards) port-forwards"
@@ -218,9 +218,9 @@ private struct HeaderView: View {
     }
 }
 
-// MARK: - AWS
+// MARK: - Port forwards
 
-private struct AWSView: View {
+private struct PortForwardView: View {
     @EnvironmentObject private var state: AppState
 
     var body: some View {
@@ -228,7 +228,7 @@ private struct AWSView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let detail = state.environmentDetail {
                     if detail.portForwards.isEmpty {
-                        AWSEmptyView(environment: detail.name)
+                        PortForwardEmptyView(environment: detail.name)
                     } else {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("PORT-FORWARDS")
@@ -255,14 +255,14 @@ private struct AWSView: View {
                             }
                         }
                     }
-                } else if state.awsEnvironment == nil {
-                    AWSEmptyView(environment: nil)
+                } else if state.portForwardEnvironment == nil {
+                    PortForwardEmptyView(environment: nil)
                 } else {
                     VStack(spacing: 14) {
                         ProgressView()
                             .controlSize(.small)
                             .tint(Theme.accent)
-                        Text("Loading AWS environment…")
+                        Text("Loading port-forward environment…")
                             .font(.system(size: 12, design: .rounded))
                             .foregroundStyle(Theme.textDim)
                     }
@@ -280,16 +280,16 @@ private struct AWSView: View {
     }
 }
 
-private struct AWSEmptyView: View {
+private struct PortForwardEmptyView: View {
     let environment: String?
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "cloud")
-                .font(.system(size: 38, weight: .light))
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Theme.textDim)
 
-            Text(environment == nil ? "No AWS environment" : "No AWS workloads yet")
+            Text(environment == nil ? "No port-forward environment" : "No port forwards yet")
                 .font(Theme.title(18))
                 .foregroundStyle(Theme.text)
 

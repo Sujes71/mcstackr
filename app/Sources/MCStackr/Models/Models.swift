@@ -168,23 +168,27 @@ struct LocalProcessInfo: Codable, Identifiable, Hashable {
 
 enum AppSection: String, CaseIterable, Identifiable {
     case docker
-    case aws
+    case portForward
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .docker: return "Docker"
-        case .aws: return "AWS"
+        case .portForward: return "Port Forwards"
         }
     }
 
     var systemImage: String {
         switch self {
         case .docker: return "shippingbox.fill"
-        case .aws: return "cloud.fill"
+        case .portForward: return "arrow.left.arrow.right"
         }
     }
+}
+
+struct UpdateProfileRequest: Encodable {
+    let description: String
 }
 
 struct CreateServiceRequest: Encodable {

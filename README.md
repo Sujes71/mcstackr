@@ -12,7 +12,7 @@ two sections:
 
 - **Docker** — the environment named `local`: compose services, live status,
   logs and lifecycle actions.
-- **AWS** — every other environment (`dev`, `staging`, …): Kubernetes
+- **Port Forwards** — every other environment (`dev`, `staging`, …): Kubernetes
   port-forwards and cloud workloads. Read-only in this slice.
 
 ## Architecture
@@ -85,10 +85,10 @@ All routes require `Authorization: Bearer <token>`.
 
 ## Scope of this slice
 
-Implemented: workspace switcher (create/delete), Docker and AWS sections, Docker
+Implemented: workspace switcher (create/settings/delete), Docker and Port Forwards sections, Docker
 service status, lifecycle actions, live logs, curated catalog + Docker Hub
 search, add/edit/remove services with prefilled editable defaults (ports, env
 vars, volumes), shared config, engine lifecycle.
 
-Next slices: Kubernetes port-forward + resource manager (AWS section), DB
+Next slices: Kubernetes port-forward + resource manager (Port Forwards section), DB
 operations, queues, MockServer, request collections, git operations.

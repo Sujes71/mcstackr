@@ -16,7 +16,7 @@ struct NewWorkspaceView: View {
                     Text("New workspace")
                         .font(Theme.display(22))
                         .foregroundStyle(Theme.text)
-                    Text("A workspace is one project: its Docker stack and its AWS workloads.")
+                    Text("A workspace is one project: its Docker stack and its port-forward environment.")
                         .font(.system(size: 11.5, design: .rounded))
                         .foregroundStyle(Theme.textMuted)
                 }
@@ -27,9 +27,20 @@ struct NewWorkspaceView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                FieldLabel(text: "Name")
+                HStack {
+                    FieldLabel(text: "Name")
+                    Spacer()
+                    Text("\(name.count)/\(workspaceNameLimit)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(name.count >= workspaceNameLimit ? Theme.danger : Theme.textDim)
+                }
                 ThemedTextField(placeholder: "e.g. Globick", text: $name)
-                Text("Letters, numbers, _, . and - only.")
+                    .onChange(of: name) { _, value in
+                        if value.count > workspaceNameLimit {
+                            name = String(value.prefix(workspaceNameLimit))
+                        }
+                    }
+                Text("Letters, numbers, _, . and - only. Max \(workspaceNameLimit) characters.")
                     .font(.system(size: 10, design: .rounded))
                     .foregroundStyle(Theme.textDim)
             }
@@ -43,7 +54,7 @@ struct NewWorkspaceView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.running)
-                Text("Docker and AWS sections are created automatically.")
+                Text("Docker and Port Forwards sections are created automatically.")
                     .font(.system(size: 11, design: .rounded))
                     .foregroundStyle(Theme.textMuted)
             }
@@ -64,7 +75,6 @@ struct NewWorkspaceView: View {
 
             HStack {
                 Spacer()
-                ActionTextButton(title: "Cancel") { dismiss() }
                 ActionTextButton(
                     title: isSaving ? "Creating…" : "Create workspace",
                     systemName: "plus",
@@ -80,6 +90,8 @@ struct NewWorkspaceView: View {
         .frame(width: 500)
         .background(Theme.background)
     }
+
+    private let workspaceNameLimit = 24
 
     private func create() async {
         localError = nil

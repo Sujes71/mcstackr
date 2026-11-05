@@ -114,7 +114,6 @@ struct ServiceEditorView: View {
 
             Spacer()
 
-            ActionTextButton(title: "Cancel") { dismiss() }
             ActionTextButton(
                 title: isSaving ? "Saving…" : "Save changes",
                 systemName: "checkmark",

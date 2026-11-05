@@ -129,6 +129,10 @@ type createProfileRequest struct {
 	Environments []string `json:"environments"`
 }
 
+type updateProfileRequest struct {
+	Description string `json:"description"`
+}
+
 type createEnvironmentRequest struct {
 	Name string `json:"name"`
 }
@@ -288,6 +292,10 @@ func (s *Server) handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "profile name is required")
 		return
 	}
+	if len([]rune(name)) > 24 {
+		writeError(w, http.StatusBadRequest, "profile name must be 24 characters or fewer")
+		return
+	}
 	if config.SanitizeComposeName(name) != name {
 		writeError(w, http.StatusBadRequest, "profile name may only contain letters, numbers, _, . and -")
 		return
@@ -343,6 +351,36 @@ func (s *Server) handleCreateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, toProfileDTO(profile))
+}
+
+func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	var req updateProfileRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var updated config.Profile
+	err := s.store.Update(func(c *config.Config) error {
+		profile, ok := c.GetProfile(profileName)
+		if !ok {
+			return fmt.Errorf("profile %q not found", profileName)
+		}
+		next := *profile
+		next.Description = strings.TrimSpace(req.Description)
+		updated = next
+		return c.UpdateProfile(next)
+	})
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		writeError(w, status, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toProfileDTO(updated))
 }
 
 func (s *Server) handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
