@@ -297,6 +297,18 @@ struct DBJob: Codable, Identifiable {
     var isFailure: Bool { state == "error" }
 }
 
+/// The standard stamp of an operation: date and time, in the same format
+/// everywhere it appears.
+func operationStamp(_ iso: String) -> String {
+    guard !iso.isEmpty else { return "" }
+    let parser = ISO8601DateFormatter()
+    parser.formatOptions = [.withInternetDateTime]
+    guard let date = parser.date(from: iso) else { return "" }
+    let formatter = DateFormatter()
+    formatter.dateFormat = "dd/MM HH:mm"
+    return formatter.string(from: date)
+}
+
 /// A finished operation, surfaced as a notice while the user works elsewhere.
 struct DBJobNotice: Identifiable, Equatable {
     let id: String

@@ -479,10 +479,11 @@ struct DBOpsView: View {
                 if let syncEnv = job.syncEnv, !syncEnv.isEmpty {
                     TechBadge(text: syncEnv, color: Theme.info)
                 }
-                Spacer()
-                Text(timeLabel(job))
+                Text(operationStamp(job.finishedAt ?? job.startedAt))
                     .font(Theme.monoSmall)
                     .foregroundStyle(Theme.textDim)
+
+                Spacer(minLength: 0)
             }
 
             if let output = job.output, !output.isEmpty {
@@ -671,18 +672,6 @@ struct DBOpsView: View {
         default:
             return ""
         }
-    }
-
-    /// The time the operation happened, small and dim.
-    private func timeLabel(_ job: DBJob) -> String {
-        let iso = job.finishedAt ?? job.startedAt
-        guard !iso.isEmpty else { return "" }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        guard let date = formatter.date(from: iso) else { return "" }
-        let time = DateFormatter()
-        time.dateFormat = "HH:mm"
-        return time.string(from: date)
     }
 
     private func byteLabel(_ bytes: Int64) -> String {
