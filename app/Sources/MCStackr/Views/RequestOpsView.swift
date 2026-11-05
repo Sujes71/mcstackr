@@ -347,15 +347,19 @@ struct RequestOpsView: View {
                     .foregroundStyle(Theme.text)
 
                 if url.isEmpty {
-                    HStack(spacing: 5) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Theme.danger)
-                        Text("Assign a value")
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Theme.danger)
+                    Button {
+                        sheetTarget = .folder(folder: folder, url: url)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Assign a value")
+                                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundStyle(Theme.danger)
                     }
-                    .help("This folder has no value in this environment: its requests cannot run")
+                    .buttonStyle(.plain)
+                    .help("This folder has no value in this environment: its requests cannot run. Click to assign one.")
                 } else {
                     Text(url)
                         .font(Theme.monoSmall)
