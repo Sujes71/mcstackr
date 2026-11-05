@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 )
 
 // Server is the loopback HTTP API consumed by the native macOS app.
@@ -52,6 +55,19 @@ func (s *Server) routes() {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	debug := os.Getenv("MCSTACKR_DEBUG") == "1"
+	if !debug {
+		s.serve(w, r)
+		return
+	}
+
+	started := time.Now()
+	recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	s.serve(recorder, r)
+	log.Printf("%s %s -> %d (%s)", r.Method, r.URL.Path, recorder.status, time.Since(started).Round(time.Millisecond))
+}
+
+func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	if !s.authorized(r) {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -60,6 +76,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 	}
 	s.mux.ServeHTTP(w, r)
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 func (s *Server) authorized(r *http.Request) bool {

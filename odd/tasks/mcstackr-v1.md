@@ -56,3 +56,14 @@ request collections, git operations.
   engine smoke test against the real config, and the app bundle build.
 - **L4 (scope):** first slice covers profiles + Docker services + logs + Hub
   search. Kubernetes, DBOps, queues, mocks, requests and git follow.
+- **L5 (bugfix):** Boot hung forever on "STARTING LOCAL ENGINE". Root cause:
+  `FileHandle.read(upToCount:)` on the engine's stdout pipe blocked even though
+  the handshake bytes were in the pipe — reproduced with a standalone Swift
+  harness (`/bin/echo` returns, the long-lived engine does not); the 10s deadline
+  could not fire because it was a blocked synchronous read. Fix: read with
+  `availableData` (returns as soon as any bytes arrive) and enforce the deadline
+  by terminating the engine on timeout, which closes the pipe. Also retained the
+  stdin `Pipe` explicitly so it cannot deallocate. Added opt-in request logging
+  (`MCSTACKR_DEBUG=1`) to the engine. Verified: health, profiles and status are
+  requested, then 3s polling continues, which only happens after boot phase
+  `.ready`; engine still exits with the app.

@@ -25,7 +25,9 @@ final class EngineRuntime {
 
     private(set) var client: EngineClient?
     private var process: Process?
+    private var stdinPipe: Pipe?
     private var stdoutHandle: FileHandle?
+    private var handshakeTimedOut = false
 
     private init() {}
 
@@ -48,9 +50,11 @@ final class EngineRuntime {
 
         try process.run()
         self.process = process
+        self.stdinPipe = stdin
         self.stdoutHandle = stdout.fileHandleForReading
+        self.handshakeTimedOut = false
 
-        let (port, token) = try await readHandshake(from: stdout.fileHandleForReading)
+        let (port, token) = try await readHandshake(from: stdout.fileHandleForReading, process: process)
 
         process.terminationHandler = { [weak self] proc in
             Task { @MainActor in
@@ -67,25 +71,41 @@ final class EngineRuntime {
 
     func stop() {
         process?.terminationHandler = nil
+        // Closing stdin makes the engine exit on its own (it watches for EOF),
+        // then terminate() is only a fallback for a stuck process.
+        try? stdinPipe?.fileHandleForWriting.close()
         process?.terminate()
         process = nil
         client = nil
+        stdinPipe = nil
         try? stdoutHandle?.close()
         stdoutHandle = nil
     }
 
     // MARK: - Internals
 
-    private func readHandshake(from handle: FileHandle) async throws -> (Int, String) {
-        let deadline = Date().addingTimeInterval(10)
+    private func readHandshake(from handle: FileHandle, process: Process) async throws -> (Int, String) {
+        let timeout = Task { [weak process] in
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard !Task.isCancelled, let process else { return }
+            handshakeTimedOut = true
+            process.terminate()
+        }
+        defer { timeout.cancel() }
+
         var buffer = Data()
 
-        while Date() < deadline {
-            let chunk = try await readSome(handle)
+        while true {
+            let chunk = await readAvailable(handle)
             if chunk.isEmpty {
-                throw EngineLaunchError.handshakeFailed("The engine exited before sending its handshake.")
+                throw EngineLaunchError.handshakeFailed(
+                    handshakeTimedOut
+                        ? "Timed out waiting for the engine handshake."
+                        : "The engine exited before sending its handshake."
+                )
             }
             buffer.append(chunk)
+
             if let newlineIndex = buffer.firstIndex(of: 0x0A) {
                 let lineData = buffer[buffer.startIndex..<newlineIndex]
                 let line = String(data: lineData, encoding: .utf8) ?? ""
@@ -98,18 +118,15 @@ final class EngineRuntime {
                 return (port, String(parts[2]))
             }
         }
-        throw EngineLaunchError.handshakeFailed("Timed out waiting for the engine handshake.")
     }
 
-    private func readSome(_ handle: FileHandle) async throws -> Data {
-        try await withCheckedThrowingContinuation { continuation in
+    /// Reads whatever the pipe currently holds. `availableData` returns as soon
+    /// as any bytes arrive, unlike `read(upToCount:)` which can wait forever when
+    /// the writer keeps its end open and sends less than the requested count.
+    private func readAvailable(_ handle: FileHandle) async -> Data {
+        await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    let data = try handle.read(upToCount: 4096) ?? Data()
-                    continuation.resume(returning: data)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+                continuation.resume(returning: handle.availableData)
             }
         }
     }
