@@ -286,6 +286,33 @@ struct RequestOpsView: View {
         .padding(.vertical, 2)
     }
 
+    /// Adding a request belongs to the folder level, so the affordance sits
+    /// with the requests of the folder, under the last one.
+    private func addRequestRow(_ folder: String) -> some View {
+        HStack(spacing: 10) {
+            Color.clear
+                .frame(width: 58, height: 14)
+
+            Button {
+                sheetTarget = .request(folder: folder, request: nil)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("Add request")
+                        .font(.system(size: 12, design: .rounded))
+                }
+                .foregroundStyle(Theme.textDim)
+            }
+            .buttonStyle(.plain)
+            .help("Add a request to \(folder)")
+
+            Spacer(minLength: 8)
+        }
+        .padding(.vertical, 2)
+        .padding(.leading, 40)
+    }
+
     /// A folder: its name sits next to it, and it holds the requests that
     /// use it. It can be folded and unfolded.
     private func folderTree(_ folder: String) -> some View {
@@ -339,10 +366,6 @@ struct RequestOpsView: View {
 
                 Spacer(minLength: 8)
 
-                ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add request to \(folder)") {
-                    sheetTarget = .request(folder: folder, request: nil)
-                }
-
                 ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit folder") {
                     sheetTarget = .folder(folder: folder, url: url)
                 }
@@ -357,12 +380,7 @@ struct RequestOpsView: View {
                 ForEach(items) { request in
                     requestRow(request)
                 }
-                if items.isEmpty {
-                    Text("No requests in this folder.")
-                        .font(.system(size: 10.5, design: .rounded))
-                        .foregroundStyle(Theme.textDim)
-                        .padding(.leading, 40)
-                }
+                addRequestRow(folder)
             }
         }
     }
