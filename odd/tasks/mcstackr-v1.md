@@ -62,6 +62,10 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   duplicate bottom `Cancel`. The add-service back step is a bare `<` icon.
 - **S22** — The sidebar shows the full workspace name (no initials) and creation
   caps names at 24 characters, enforced in the UI and by the engine.
+- **S24** — All sheets share one shell (header with a single close, divider,
+  scrolling body, divider, footer) and the same `FormSection` heading: a
+  centered, larger title with hairline rules. New workspace, workspace
+  settings, service editor and add service use it.
 - **S23** — The former AWS section is named **Port Forwards**: the original
   Stackr treats every non-`local` environment as a Kubernetes port-forward
   environment, so the cloud-specific name was misleading.
@@ -97,6 +101,7 @@ MockServer, request collections, git operations.
 - [x] T22 — Engine: `PATCH /api/profiles/{p}` for the workspace description; 24-character profile-name limit. Evidence: PATCH 200, long name 400, unknown profile 404.
 - [x] T23 — Swift: workspace settings sheet with the shared destructive footer; workspace delete removed from the menu; unified delete button in the service editor; single close affordance; bare `<` back in add-service. Evidence: `swift build` passes.
 - [x] T24 — Swift: full workspace name with a 24-character creation limit; AWS renamed to Port Forwards across UI, README and specs. Evidence: `swift build` passes; app boots and loads status + catalog.
+- [x] T25 — Swift: extracted `FormSection` and applied it to every form; New workspace and Workspace settings now use the standard sheet shell. Evidence: `swift build` passes; bundle rebuilt.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
 
@@ -144,6 +149,11 @@ MockServer, request collections, git operations.
   > respecto a kubernetes renombralo portforward que se sepa para que sirve al final
   >
   > o algo similar que lo deje clarisimo
+- **L12 (user feedback, verbatim):**
+  > en new workspace misma logca y en generl en todos los formularios hay que estandarizar
+- **L13 (decision):** form standardization: `FormSection` (centered title +
+  hairline rules) is shared, and every sheet follows the same shell and footer
+  placement. New workspace was rebuilt on that shell.
 - **L11 (decision):** delete is now one pattern: red destructive button on the
   left of a sheet footer plus a native confirmation, used by the service editor
   and by the new workspace settings sheet (workspace delete left the dropdown).

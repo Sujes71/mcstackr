@@ -23,57 +23,61 @@ struct WorkspaceSettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        FieldLabel(text: "Workspace")
-                        HStack(spacing: 9) {
-                            Image(systemName: "square.stack.3d.up.fill")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Theme.accent)
-                            Text(state.workspaceName)
-                                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.text)
-                                .lineLimit(1)
+                    FormSection("Workspace") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 9) {
+                                Image(systemName: "square.stack.3d.up.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Theme.accent)
+                                Text(state.workspaceName)
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Theme.text)
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Theme.stroke, lineWidth: 1)
+                            }
+                            Text("Workspace names are limited to 24 characters.")
+                                .font(.system(size: 10, design: .rounded))
+                                .foregroundStyle(Theme.textDim)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Theme.stroke, lineWidth: 1)
-                        }
-                        Text("Workspace names are limited to 24 characters.")
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundStyle(Theme.textDim)
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        FieldLabel(text: "Description")
-                        ThemedTextField(placeholder: "Optional short description", text: $description)
+                    FormSection("Details") {
+                        VStack(alignment: .leading, spacing: 6) {
+                            FieldLabel(text: "Description")
+                            ThemedTextField(placeholder: "Optional short description", text: $description)
+                        }
                     }
 
                     if let profile = state.selectedProfile {
-                        VStack(alignment: .leading, spacing: 8) {
-                            FieldLabel(text: "Environments")
-                            ForEach(profile.environments) { environment in
-                                HStack(spacing: 9) {
-                                    Image(systemName: environment.name == "local"
-                                          ? "shippingbox.fill"
-                                          : "arrow.left.arrow.right")
-                                        .font(.system(size: 10, weight: .semibold))
-                                        .foregroundStyle(Theme.textMuted)
-                                        .frame(width: 16)
-                                    Text(environment.name)
-                                        .font(Theme.monoSmall)
-                                        .foregroundStyle(Theme.text)
-                                    Spacer()
-                                    Text("\(environment.serviceCount) services")
-                                        .font(.system(size: 10, design: .rounded))
-                                        .foregroundStyle(Theme.textDim)
+                        FormSection("Environments") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(profile.environments) { environment in
+                                    HStack(spacing: 9) {
+                                        Image(systemName: environment.name == "local"
+                                              ? "shippingbox.fill"
+                                              : "arrow.left.arrow.right")
+                                            .font(.system(size: 10, weight: .semibold))
+                                            .foregroundStyle(Theme.textMuted)
+                                            .frame(width: 16)
+                                        Text(environment.name)
+                                            .font(Theme.monoSmall)
+                                            .foregroundStyle(Theme.text)
+                                        Spacer()
+                                        Text("\(environment.serviceCount) services")
+                                            .font(.system(size: 10, design: .rounded))
+                                            .foregroundStyle(Theme.textDim)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                             }
                         }
                     }

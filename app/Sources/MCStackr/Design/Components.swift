@@ -201,6 +201,36 @@ struct ActionTextButton: View {
     }
 }
 
+// MARK: - Form section
+
+struct FormSection<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Rectangle()
+                    .fill(Theme.stroke)
+                    .frame(height: 1)
+                Text(title)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+                    .fixedSize()
+                Rectangle()
+                    .fill(Theme.stroke)
+                    .frame(height: 1)
+            }
+            content
+        }
+    }
+}
+
 // MARK: - Form field
 
 struct FieldLabel: View {
