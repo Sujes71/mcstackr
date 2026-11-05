@@ -555,9 +555,9 @@ struct DBOpsView: View {
     private func icon(for action: DBAction) -> String {
         switch action.id {
         case "export-schema": return "arrow.up.doc"
-        case "export-data": return "arrow.up.bin"
+        case "export-data": return "tray.and.arrow.up"
         case "import-schema": return "arrow.down.doc"
-        case "import-data": return "arrow.down.bin"
+        case "import-data": return "tray.and.arrow.down"
         case "truncate": return "trash"
         default: return "play"
         }
