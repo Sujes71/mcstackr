@@ -16,7 +16,7 @@ struct ServiceConfigForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             if showName {
-                section("SERVICE") {
+                section("Service") {
                     VStack(alignment: .leading, spacing: 6) {
                         FieldLabel(text: "Name")
                         ThemedTextField(placeholder: "postgres", text: $name)
@@ -29,17 +29,11 @@ struct ServiceConfigForm: View {
                 }
             }
 
-            section("IMAGE") {
-                HStack(alignment: .bottom, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        FieldLabel(text: "Image")
-                        ThemedTextField(placeholder: "e.g. postgres", text: $image)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        FieldLabel(text: "Tag")
-                        ThemedTextField(placeholder: "e.g. 16-alpine", text: $tag)
-                            .frame(width: 170)
-                    }
+            section("Image") {
+                HStack(alignment: .center, spacing: 12) {
+                    ThemedTextField(placeholder: "image, e.g. postgres", text: $image)
+                    ThemedTextField(placeholder: "tag, e.g. 16-alpine", text: $tag)
+                        .frame(width: 170)
                 }
 
                 if let db = detectedDatabase {
@@ -49,7 +43,7 @@ struct ServiceConfigForm: View {
                 }
             }
 
-            section("PORTS") {
+            section("Ports") {
                 VStack(spacing: 8) {
                     ForEach($ports.indices, id: \.self) { index in
                         HStack(spacing: 10) {
@@ -74,7 +68,7 @@ struct ServiceConfigForm: View {
                 }
             }
 
-            section("ENVIRONMENT VARIABLES") {
+            section("Environment Variables") {
                 HStack {
                     Text("Values are stored in ~/.stackr/config.yaml")
                         .font(.system(size: 10, design: .rounded))
@@ -113,7 +107,7 @@ struct ServiceConfigForm: View {
                 }
             }
 
-            section("VOLUMES") {
+            section("Volumes") {
                 VStack(spacing: 8) {
                     ForEach($volumes.indices, id: \.self) { index in
                         HStack(spacing: 10) {
@@ -168,11 +162,19 @@ struct ServiceConfigForm: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 9, weight: .bold, design: .rounded))
-                .tracking(1.1)
-                .foregroundStyle(Theme.textDim)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Rectangle()
+                    .fill(Theme.stroke)
+                    .frame(height: 1)
+                Text(title)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+                    .fixedSize()
+                Rectangle()
+                    .fill(Theme.stroke)
+                    .frame(height: 1)
+            }
             content()
         }
     }
