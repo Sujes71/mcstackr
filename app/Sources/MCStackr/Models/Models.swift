@@ -190,12 +190,26 @@ struct PortForwardRequest: Codable {
     let k8sService: String
 }
 
+struct LocalProcessRuntime: Codable {
+    let state: String
+    let pid: Int?
+}
+
+struct LocalProcessRequest: Codable {
+    let name: String
+    let command: String
+    let workDir: String
+}
+
 struct LocalProcessInfo: Codable, Identifiable, Hashable {
     let name: String
     let command: String
     let workDir: String
+    let state: String
+    let pid: Int?
 
     var id: String { name }
+    var isRunning: Bool { state == "running" }
 }
 
 enum AppSection: String, CaseIterable, Identifiable {

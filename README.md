@@ -11,7 +11,8 @@ The UI is workspace-first. A **workspace** maps to one Stackr profile and has
 two sections:
 
 - **Docker** — the environment named `local`: compose services, live status,
-  logs and lifecycle actions.
+  logs and lifecycle actions, plus host commands (`local_processes`) that run
+  on your Mac.
 - **Port Forwards** — every other environment (`dev`, `staging`, …): Kubernetes
   port-forwards and cloud workloads. Forwards are discovered from kubeconfig and
   managed with kubectl.
@@ -79,6 +80,10 @@ All routes require `Authorization: Bearer <token>`.
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
+| POST | `/api/profiles/{p}/envs/{e}/local-processes` | add a host command |
+| DELETE | `/api/profiles/{p}/envs/{e}/local-processes/{name}` | stop and delete a host command |
+| POST | `/api/profiles/{p}/envs/{e}/local-processes/{name}/actions/{start,stop}` | one host command |
+| POST | `/api/profiles/{p}/envs/{e}/local-processes/actions/{start,stop}` | every host command in the environment |
 | POST | `/api/profiles/{p}/envs/{e}/port-forwards` | add a port-forward |
 | PATCH | `/api/profiles/{p}/envs/{e}/port-forwards/{name}` | change its local port |
 | DELETE | `/api/profiles/{p}/envs/{e}/port-forwards/{name}` | stop and delete a port-forward |
@@ -100,7 +105,8 @@ Implemented: workspace switcher (create/settings/delete), Docker and Port Forwar
 service status, lifecycle actions, live logs, curated catalog + Docker Hub
 search, add/edit/remove services with prefilled editable defaults (ports, env
 vars, volumes), port-forward discovery + CRUD + start/stop with live state,
-shared config, engine lifecycle.
+local-process management (start/stop/add/delete, orphan recovery), shared
+config, engine lifecycle.
 
-Next slices: Kubernetes resource manager (deployments), local processes, DB
-operations, queues, MockServer, request collections, git operations.
+Next slices: Kubernetes resource manager (deployments), DB operations, queues,
+MockServer, request collections, git operations.

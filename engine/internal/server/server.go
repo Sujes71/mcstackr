@@ -19,6 +19,7 @@ type Server struct {
 	store   *Store
 	mux     *http.ServeMux
 	pf      *portForwardManager
+	lp      *localProcessManager
 }
 
 func New(token, version string) (*Server, error) {
@@ -32,6 +33,7 @@ func New(token, version string) (*Server, error) {
 		store:   store,
 		mux:     http.NewServeMux(),
 		pf:      newPortForwardManager(),
+		lp:      newLocalProcessManager(),
 	}
 	s.routes()
 	return s, nil
@@ -55,6 +57,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services", s.handleAddService)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/services/{service}", s.handleDeleteService)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/actions/{action}", s.handleServiceAction)
+
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/local-processes", s.handleAddLocalProcess)
+	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/local-processes/{name}", s.handleDeleteLocalProcess)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/local-processes/actions/{action}", s.handleLocalProcessesAction)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/local-processes/{name}/actions/{action}", s.handleLocalProcessAction)
 
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/port-forwards", s.handleAddPortForward)
 	s.mux.HandleFunc("PATCH /api/profiles/{profile}/envs/{env}/port-forwards/{name}", s.handleUpdatePortForward)

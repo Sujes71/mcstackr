@@ -101,6 +101,26 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   `PATCH /envs/{e}/services/{s}` (update + regenerate compose),
   `DELETE /profiles/{p}` (delete profile).
 
+- **S34** — The Docker header keeps only **Start all** / **Stop all**; the
+  global **Restart all** action is gone (restart is stop then start, and the
+  per-service restart stays).
+- **S35** — The Port Forwards header mirrors Docker: a `LIVE` badge when at
+  least one forward is running and a `"N port-forwards · X running"` subtitle.
+- **S36** — Local processes belong to the Docker section: they are listed with
+  state, PID, command and workdir, can be started/stopped, deleted through the
+  standard destructive confirmation, and added with **Run a command** (name,
+  command, optional workdir). The name is sanitized and must be unique against
+  services and other local processes; the command is required. Commands run
+  through `sh -c`, so shell syntax works.
+- **S37** — Each local process runs in its own process group and writes
+  `~/.stackr/<profile>/<env>/procs/<name>.pid`. A restarted engine adopts
+  processes that are still alive, detects exits on its own, waits up to five
+  seconds when stopping, and leaves no children behind on shutdown. Environment
+  `up` / `stop` / `down` also start or stop its local processes, and deleting a
+  profile stops them.
+- **S38** — AWS/EKS is not exercised without the VPN. Port-forward verification
+  uses a fake `kubectl`; local processes are verified locally.
+
 Non-goals for this slice: Kubernetes management, DB operations, queues,
 MockServer, request collections, git operations.
 
@@ -139,6 +159,10 @@ MockServer, request collections, git operations.
 - [x] T33 — Swift: `PortForwardInfo.state/error`, discovery + action methods, 3s state refresh while the section is open.
 - [x] T34 — Swift: row state dot + start/stop, editor sheet with local port and red delete, header Start all/Stop all and add.
 - [x] T35 — Swift: discovery wizard sheet (context → namespace → service → local port). Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T36 — Swift: dropped the global Restart all; Port Forwards header shows the LIVE badge and running count. Evidence: `swift build` and bundle rebuild pass; boot smoke clean.
+- [x] T37 — Engine: `localprocess` runtime (process group, PID file, orphan adoption, exit detection, 5s stop) and a per profile+env manager wired into shutdown. Evidence: start/stop/add/delete 201/400/400/400/204; killed process flips to stopped; adopted PID survives an engine SIGKILL and is stopped afterwards; 0 leftovers.
+- [x] T38 — Engine: local-process routes, env detail state/pid, env actions start/stop them, profile delete stops them. Evidence: `up` with no services 200 and starts the process; `stop` stops it; duplicate names 400.
+- [x] T39 — Swift: Docker section lists local processes with state/pid, start/stop, context-menu delete, **Run a command** sheet, empty-state entry point, header terminal action, 3s refresh. Evidence: `swift build` and bundle rebuild pass; app boots and loads `local` detail.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
 
@@ -224,6 +248,23 @@ MockServer, request collections, git operations.
 
 - **L16 (user request, verbatim):**
   > Vale tiene buenaa pinta. Podemos pasar a desarrollar lo siguiente recuerda que tienes stackr como referencia
+- **L18 (user request, verbatim):**
+  > ademas en docker señalamos los ue estan running pero en forward no estamos informando eso, que las ventanas esten alineadas en las vistas en ese sentido pero muy bien
+  >
+  > ya añadi el aws por si quieres echarle un vistazo por si ves algo
+  >
+  > una vez ajustes eso pasa a lo siguiente
+- **L19 (user constraint, verbatim):**
+  > te corte porque veo que esstas orobando creo cosas contra aws pero sin la vpn n funciona asi que no pierdas el tiempo probando eso
+- **L20 (decision):** the header alignment shipped first (no global Restart
+  all, LIVE badge + running count in Port Forwards). The next slice is local
+  processes, not the Kubernetes manager: local processes are fully verifiable
+  without the VPN and they were already present in the config but invisible in
+  the UI. Runtime copies Stackr semantics (own process group, PID files under
+  `procs/`, orphan adoption, 5s stop); divergences: no log capture, no editor
+  for an existing process (delete and re-add). Environment `up`/`stop`/`down`
+  also act on them, like the TUI's `s`/`x`. The AWS/EKS cluster is never probed
+  without the VPN.
 - **L17 (decision):** the next slice is Port Forwards management, mirroring the
   original runtime exactly: `kubectl port-forward --context <ctx> -n <ns>
   service/<svc> <local>:<remote>`, `running` only after 2s, last 512 bytes of

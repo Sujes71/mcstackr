@@ -22,6 +22,7 @@ final class AppState: ObservableObject {
     @Published private(set) var engineVersion = ""
     @Published private(set) var configPath = ""
     @Published private(set) var environmentDetail: EnvironmentDetail?
+    @Published private(set) var dockerDetail: EnvironmentDetail?
     @Published private(set) var catalog: [CatalogEntry] = []
 
     @Published var section: AppSection = .docker {
@@ -65,6 +66,10 @@ final class AppState: ObservableObject {
         (environmentDetail?.portForwards ?? []).filter(\.isRunning).count
     }
 
+    var localProcesses: [LocalProcessInfo] { dockerDetail?.localProcesses ?? [] }
+
+    var runningLocalProcessCount: Int { localProcesses.filter(\.isRunning).count }
+
     var services: [ServiceStatus] {
         status?.services ?? []
     }
@@ -97,6 +102,7 @@ final class AppState: ObservableObject {
             selectInitialProfile()
             if selectedProfile != nil {
                 await refreshStatus()
+                await refreshDockerDetail()
             }
             catalog = (try? await client.get("/api/hub/catalog")) ?? []
             bootPhase = .ready
@@ -126,9 +132,11 @@ final class AppState: ObservableObject {
         if changed {
             status = nil
             environmentDetail = nil
+            dockerDetail = nil
         }
         Task {
             await refreshStatus()
+            await refreshDockerDetail()
             if section == .portForward {
                 await refreshEnvironmentDetail()
             }
@@ -152,6 +160,7 @@ final class AppState: ObservableObject {
             errorMessage = error.localizedDescription
         }
         await refreshStatus()
+        await refreshDockerDetail()
         await refreshEnvironmentDetail()
     }
 
@@ -180,6 +189,25 @@ final class AppState: ObservableObject {
             if selectedProfileName == profileName, selectedEnvName == envName {
                 status = response
                 dockerAvailable = response.dockerAvailable
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func refreshDockerDetail() async {
+        guard let client,
+              let profileName = selectedProfileName,
+              let env = dockerEnvironment else {
+            dockerDetail = nil
+            return
+        }
+        do {
+            let detail: EnvironmentDetail = try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)"
+            )
+            if selectedProfileName == profileName {
+                dockerDetail = detail
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -474,6 +502,7 @@ final class AppState: ObservableObject {
             selectedEnvName = nil
             status = nil
             environmentDetail = nil
+            dockerDetail = nil
             try await reloadProfiles()
             await refreshStatus()
             return true
@@ -634,6 +663,53 @@ final class AppState: ObservableObject {
         }
         await refreshHealth()
         await refreshStatus()
+        await refreshDockerDetail()
+    }
+
+    // MARK: - Local processes
+
+    func addLocalProcess(name: String, command: String, workDir: String) async -> Bool {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return false }
+        var success = false
+        await run(action: "add \(name)") {
+            let detail: EnvironmentDetail = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/local-processes",
+                body: LocalProcessRequest(name: name, command: command, workDir: workDir)
+            )
+            self.dockerDetail = detail
+            success = true
+        }
+        return success
+    }
+
+    func deleteLocalProcess(named name: String) async -> Bool {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return false }
+        var success = false
+        await run(action: "delete \(name)") {
+            try await client.deleteVoid(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/local-processes/\(name.pathComponentEncoded)"
+            )
+            success = true
+        }
+        return success
+    }
+
+    func startLocalProcess(_ process: LocalProcessInfo) async {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return }
+        await run(action: "start \(process.name)") {
+            let _: LocalProcessRuntime = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/local-processes/\(process.name.pathComponentEncoded)/actions/start"
+            )
+        }
+    }
+
+    func stopLocalProcess(_ process: LocalProcessInfo) async {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return }
+        await run(action: "stop \(process.name)") {
+            let _: LocalProcessRuntime = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/local-processes/\(process.name.pathComponentEncoded)/actions/stop"
+            )
+        }
     }
 
     private func startPolling() {
@@ -646,6 +722,8 @@ final class AppState: ObservableObject {
                     await self.refreshStatus()
                     if self.section == .portForward {
                         await self.refreshEnvironmentDetail()
+                    } else {
+                        await self.refreshDockerDetail()
                     }
                 }
             }

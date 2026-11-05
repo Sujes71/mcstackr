@@ -210,6 +210,7 @@ func (m *portForwardManager) stopAllGlobal() {
 // Shutdown stops every live port-forward. Safe to call more than once.
 func (s *Server) Shutdown() {
 	s.pf.stopAllGlobal()
+	s.lp.stopAllGlobal()
 }
 
 // ── DTOs ────────────────────────────────────────────────────────────────────
@@ -258,7 +259,8 @@ func (s *Server) environmentDetail(profileName, envName string) (environmentDeta
 		return environmentDetailDTO{}, err
 	}
 	s.pf.reconcile(profileName, envName, env.PortForwards)
-	return toEnvironmentDetailDTO(env, s.pf.snapshot(profileName, envName)), nil
+	s.lp.reconcile(profileName, envName, env.LocalProcesses)
+	return toEnvironmentDetailDTO(env, s.pf.snapshot(profileName, envName), s.lp.snapshot(profileName, envName)), nil
 }
 
 func validatePortForward(req portForwardRequest, others []config.PortForward) (config.PortForward, error) {

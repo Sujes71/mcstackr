@@ -87,6 +87,8 @@ type localProcessDTO struct {
 	Name    string `json:"name"`
 	Command string `json:"command"`
 	WorkDir string `json:"workDir"`
+	State   string `json:"state"`
+	PID     int    `json:"pid,omitempty"`
 }
 
 type environmentDetailDTO struct {
@@ -259,7 +261,7 @@ func toVolumeMappings(in []volumeDTO) []config.VolumeMapping {
 	return out
 }
 
-func toEnvironmentDetailDTO(e config.Environment, states map[string]pfRuntime) environmentDetailDTO {
+func toEnvironmentDetailDTO(e config.Environment, states map[string]pfRuntime, procs map[string]lpRuntime) environmentDetailDTO {
 	forwards := make([]portForwardDTO, 0, len(e.PortForwards))
 	for _, pf := range e.PortForwards {
 		state := states[pf.Name]
@@ -280,7 +282,18 @@ func toEnvironmentDetailDTO(e config.Environment, states map[string]pfRuntime) e
 	}
 	processes := make([]localProcessDTO, 0, len(e.LocalProcesses))
 	for _, lp := range e.LocalProcesses {
-		processes = append(processes, localProcessDTO{Name: lp.Name, Command: lp.Command, WorkDir: lp.WorkDir})
+		state := procs[lp.Name]
+		stateName := state.State
+		if stateName == "" {
+			stateName = "stopped"
+		}
+		processes = append(processes, localProcessDTO{
+			Name:    lp.Name,
+			Command: lp.Command,
+			WorkDir: lp.WorkDir,
+			State:   stateName,
+			PID:     state.PID,
+		})
 	}
 	return environmentDetailDTO{
 		Name:           e.Name,
@@ -544,19 +557,40 @@ func (s *Server) handleEnvAction(w http.ResponseWriter, r *http.Request) {
 	envName := r.PathValue("env")
 	action := r.PathValue("action")
 
+	env, loadErr := s.loadEnvironment(profileName, envName)
+	if loadErr != nil {
+		writeError(w, http.StatusNotFound, loadErr.Error())
+		return
+	}
+
 	if err := s.ensureCompose(profileName, envName); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
+	if action == "down" || action == "stop" {
+		s.lp.reconcile(profileName, envName, env.LocalProcesses)
+		s.lp.stopAll(profileName, envName)
+	}
+
 	var err error
 	switch action {
 	case "up":
-		err = docker.Up(profileName, envName)
+		if len(env.Services) > 0 {
+			err = docker.Up(profileName, envName)
+		}
+		// Host processes are independent of Docker: start them even when the
+		// compose stack failed, and report the compose error.
+		s.lp.reconcile(profileName, envName, env.LocalProcesses)
+		s.lp.startAll(profileName, envName)
 	case "down":
-		err = docker.Down(profileName, envName)
+		if len(env.Services) > 0 {
+			err = docker.Down(profileName, envName)
+		}
 	case "stop":
-		err = docker.StopEnv(profileName, envName)
+		if len(env.Services) > 0 {
+			err = docker.StopEnv(profileName, envName)
+		}
 	case "restart":
 		err = docker.RestartEnv(profileName, envName)
 	default:
@@ -873,6 +907,7 @@ func (s *Server) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.pf.removeProfile(name)
+	s.lp.removeProfile(name)
 
 	// Best effort: bring containers down before the config disappears.
 	if docker.DaemonAvailable() {
@@ -917,7 +952,8 @@ func (s *Server) handleGetEnvironment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pf.reconcile(profileName, envName, env.PortForwards)
-	writeJSON(w, http.StatusOK, toEnvironmentDetailDTO(env, s.pf.snapshot(profileName, envName)))
+	s.lp.reconcile(profileName, envName, env.LocalProcesses)
+	writeJSON(w, http.StatusOK, toEnvironmentDetailDTO(env, s.pf.snapshot(profileName, envName), s.lp.snapshot(profileName, envName)))
 }
 
 // ── Logs (SSE) ──────────────────────────────────────────────────────────────

@@ -683,6 +683,34 @@ func (c *Config) UpdateService(profileName, envName, svcName string, updated Ser
 	return nil, fmt.Errorf("profile %q not found", profileName)
 }
 
+// AddLocalProcess appends a host process to the given environment and saves.
+// Returns an error if a local process with the same name already exists.
+func (c *Config) AddLocalProcess(profileName, envName string, lp LocalProcess) (*Profile, error) {
+	for i := range c.Profiles {
+		if c.Profiles[i].Name != profileName {
+			continue
+		}
+		p := &c.Profiles[i]
+		for j := range p.Environments {
+			if p.Environments[j].Name != envName {
+				continue
+			}
+			env := &p.Environments[j]
+			for _, existing := range env.LocalProcesses {
+				if existing.Name == lp.Name {
+					return nil, fmt.Errorf("local process %q already exists in %s/%s", lp.Name, profileName, envName)
+				}
+			}
+			env.LocalProcesses = append(env.LocalProcesses, lp)
+			p.UpdatedAt = time.Now()
+			cp := *p
+			return &cp, c.Save()
+		}
+		return nil, fmt.Errorf("environment %q not found in profile %q", envName, profileName)
+	}
+	return nil, fmt.Errorf("profile %q not found", profileName)
+}
+
 func (c *Config) DeleteLocalProcess(profileName, envName, procName string) (*Profile, error) {
 	for i := range c.Profiles {
 		if c.Profiles[i].Name != profileName {

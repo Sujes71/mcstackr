@@ -5,6 +5,8 @@ struct MainContentView: View {
     @EnvironmentObject private var state: AppState
 
     @State private var showAddService = false
+    @State private var showAddLocalProcess = false
+    @State private var pendingDeleteProcess: LocalProcessInfo?
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
     @State private var pendingDelete: ServiceStatus?
@@ -14,7 +16,11 @@ struct MainContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(showAddService: $showAddService, showAddPortForward: $showAddPortForward)
+            HeaderView(
+                showAddService: $showAddService,
+                showAddLocalProcess: $showAddLocalProcess,
+                showAddPortForward: $showAddPortForward
+            )
             Divider().overlay(Theme.stroke)
             content
         }
@@ -32,6 +38,10 @@ struct MainContentView: View {
             ServiceEditorView(service: service)
                 .environmentObject(state)
         }
+        .sheet(isPresented: $showAddLocalProcess) {
+            AddLocalProcessView()
+                .environmentObject(state)
+        }
         .sheet(isPresented: $showAddPortForward) {
             AddPortForwardView()
                 .environmentObject(state)
@@ -39,6 +49,22 @@ struct MainContentView: View {
         .sheet(item: $editingForward) { forward in
             PortForwardEditorView(forward: forward)
                 .environmentObject(state)
+        }
+        .confirmationDialog(
+            pendingDeleteProcess.map { "Delete \($0.name)?" } ?? "Delete local process?",
+            isPresented: Binding(
+                get: { pendingDeleteProcess != nil },
+                set: { if !$0 { pendingDeleteProcess = nil } }
+            ),
+            presenting: pendingDeleteProcess
+        ) { process in
+            Button("Delete process", role: .destructive) {
+                Task { await state.deleteLocalProcess(named: process.name) }
+                pendingDeleteProcess = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteProcess = nil }
+        } message: { process in
+            Text("This stops \(process.name) and removes it from \(state.workspaceName).")
         }
         .confirmationDialog(
             pendingDeleteForward.map { "Delete \($0.name)?" } ?? "Delete port-forward?",
@@ -91,9 +117,12 @@ struct MainContentView: View {
 
     @ViewBuilder
     private var dockerContent: some View {
-        if let env = state.dockerEnvironment, env.serviceCount == 0 {
-            EmptyDockerView(onAdd: { showAddService = true })
-        } else if state.services.isEmpty {
+        if let env = state.dockerEnvironment, env.serviceCount == 0, state.localProcesses.isEmpty {
+            EmptyDockerView(
+                onAddService: { showAddService = true },
+                onAddProcess: { showAddLocalProcess = true }
+            )
+        } else if state.services.isEmpty && state.dockerDetail == nil {
             VStack(spacing: 14) {
                 ProgressView()
                     .controlSize(.small)
@@ -110,29 +139,67 @@ struct MainContentView: View {
                         DockerOfflineBanner()
                     }
 
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 320), spacing: 14)],
-                        spacing: 14
-                    ) {
-                        ForEach(state.services) { service in
-                            ServiceCard(
-                                service: service,
-                                isBusy: state.runningAction != nil,
-                                onOpen: { editingService = service },
-                                onLogs: {
-                                    logTarget = LogTarget(
-                                        title: "\(service.name) · logs",
-                                        service: service.name
-                                    )
-                                },
-                                onDelete: { pendingDelete = service }
-                            )
+                    if !state.services.isEmpty {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 320), spacing: 14)],
+                            spacing: 14
+                        ) {
+                            ForEach(state.services) { service in
+                                ServiceCard(
+                                    service: service,
+                                    isBusy: state.runningAction != nil,
+                                    onOpen: { editingService = service },
+                                    onLogs: {
+                                        logTarget = LogTarget(
+                                            title: "\(service.name) · logs",
+                                            service: service.name
+                                        )
+                                    },
+                                    onDelete: { pendingDelete = service }
+                                )
+                            }
                         }
+                    }
+
+                    if !state.localProcesses.isEmpty {
+                        localProcessesSection
                     }
                 }
                 .padding(24)
             }
             .scrollIndicators(.hidden)
+        }
+    }
+
+    private var localProcessesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("LOCAL PROCESSES")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .tracking(1.1)
+                    .foregroundStyle(Theme.textDim)
+
+                Spacer()
+
+                ActionTextButton(title: "Add process", systemName: "plus") {
+                    showAddLocalProcess = true
+                }
+            }
+
+            ForEach(state.localProcesses) { process in
+                LocalProcessRow(
+                    process: process,
+                    isBusy: state.runningAction != nil,
+                    onToggle: {
+                        if process.isRunning {
+                            Task { await state.stopLocalProcess(process) }
+                        } else {
+                            Task { await state.startLocalProcess(process) }
+                        }
+                    },
+                    onDelete: { pendingDeleteProcess = process }
+                )
+            }
         }
     }
 }
@@ -148,6 +215,7 @@ private struct LogTarget: Identifiable {
 private struct HeaderView: View {
     @EnvironmentObject private var state: AppState
     @Binding var showAddService: Bool
+    @Binding var showAddLocalProcess: Bool
     @Binding var showAddPortForward: Bool
 
     private var isDocker: Bool { state.section == .docker }
@@ -221,12 +289,20 @@ private struct HeaderView: View {
                 }
             }
 
+            ActionIconButton(systemName: "terminal", tint: Theme.info, help: "Add local process") {
+                showAddLocalProcess = true
+            }
+
             ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add service") {
                 showAddService = true
             }
         } else if state.selectedProfile != nil {
             ActionTextButton(title: "Add service", systemName: "plus", prominent: true) {
                 showAddService = true
+            }
+
+            ActionIconButton(systemName: "terminal", tint: Theme.info, help: "Add local process") {
+                showAddLocalProcess = true
             }
         }
     }
@@ -311,20 +387,6 @@ private struct PortForwardView: View {
                                     onOpen: { onEdit(forward) },
                                     onDelete: { onDelete(forward) }
                                 )
-                            }
-                        }
-                    }
-
-                    if !detail.localProcesses.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("LOCAL PROCESSES")
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
-                                .tracking(1.1)
-                                .foregroundStyle(Theme.textDim)
-                                .padding(.top, 6)
-
-                            ForEach(detail.localProcesses) { process in
-                                LocalProcessRow(process: process)
                             }
                         }
                     }
@@ -463,34 +525,6 @@ private struct PortForwardRow: View {
     }
 }
 
-private struct LocalProcessRow: View {
-    let process: LocalProcessInfo
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "terminal")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Theme.violet)
-                .frame(width: 28, height: 28)
-                .background(Theme.violet.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(process.name)
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Theme.text)
-                Text(process.command)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textDim)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-        }
-        .padding(13)
-        .cardStyle()
-    }
-}
-
 // MARK: - Banners and empty states
 
 private struct DockerOfflineBanner: View {
@@ -550,7 +584,8 @@ private struct NoWorkspaceView: View {
 }
 
 private struct EmptyDockerView: View {
-    let onAdd: () -> Void
+    let onAddService: () -> Void
+    let onAddProcess: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
@@ -562,15 +597,93 @@ private struct EmptyDockerView: View {
                 .font(Theme.title(18))
                 .foregroundStyle(Theme.text)
 
-            Text("Add a service to this workspace to start building the Docker stack.")
+            Text("Add a service to this workspace, or run a command on your Mac.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(Theme.textMuted)
 
-            ActionTextButton(title: "Add service", systemName: "plus", prominent: true, action: onAdd)
-                .padding(.top, 4)
+            HStack(spacing: 10) {
+                ActionTextButton(title: "Add service", systemName: "plus", prominent: true, action: onAddService)
+                ActionTextButton(title: "Run a command", systemName: "terminal", action: onAddProcess)
+            }
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
+    }
+}
+
+// MARK: - Local process row
+
+private struct LocalProcessRow: View {
+    let process: LocalProcessInfo
+    let isBusy: Bool
+    let onToggle: () -> Void
+    let onDelete: () -> Void
+
+    private var stateColor: Color {
+        switch process.state.lowercased() {
+        case "running": return Theme.running
+        case "failed": return Theme.danger
+        default: return Theme.textDim
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            StatusDot(state: process.state)
+
+            Image(systemName: "terminal")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.info)
+                .frame(width: 28, height: 28)
+                .background(Theme.info.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 7) {
+                    Text(process.name)
+                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                    Text(process.state.uppercased())
+                        .font(.system(size: 8, weight: .black, design: .rounded))
+                        .tracking(0.8)
+                        .foregroundStyle(stateColor)
+                }
+                Text(process.command)
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
+                if !process.workDir.isEmpty {
+                    Text(process.workDir)
+                        .font(Theme.monoSmall)
+                        .foregroundStyle(Theme.textDim)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            if process.isRunning, let pid = process.pid {
+                Text("pid \(pid)")
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textDim)
+            }
+
+            ActionIconButton(
+                systemName: process.isRunning ? "stop.fill" : "play.fill",
+                tint: process.isRunning ? Theme.warning : Theme.running,
+                help: process.isRunning ? "Stop" : "Start"
+            ) {
+                onToggle()
+            }
+            .disabled(isBusy)
+        }
+        .padding(13)
+        .cardStyle()
+        .contextMenu {
+            Button(process.isRunning ? "Stop" : "Start") { onToggle() }
+            Divider()
+            Button("Delete process…", role: .destructive) { onDelete() }
+        }
     }
 }
 
