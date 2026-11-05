@@ -24,6 +24,8 @@ type Server struct {
 	dbJobs  *dbJobRegistry
 	// The cancel of the request runs that are in flight.
 	requestCancels sync.Map
+	// The last execution of every request.
+	requestRuns sync.Map
 }
 
 func New(token, version string) (*Server, error) {

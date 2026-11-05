@@ -443,10 +443,27 @@ struct RequestDefinition: Codable, Identifiable, Hashable {
     var id: String { name }
 }
 
+/// The last execution of a request, kept by the engine so it survives the
+/// window that ran it.
+struct RequestRun: Codable, Identifiable, Hashable {
+    let key: String
+    let env: String
+    let request: String
+    let state: String
+    let output: String?
+    let error: String?
+    let finishedAt: String?
+
+    var id: String { key }
+    var isDone: Bool { state == "done" }
+    var isFailure: Bool { state != "done" }
+}
+
 struct RequestsResponse: Codable {
     let envs: [RequestEnvironment]
     let folders: [String]
     let requests: [RequestDefinition]
+    var runs: [RequestRun] = []
 }
 
 /// The payload to create or update a request.

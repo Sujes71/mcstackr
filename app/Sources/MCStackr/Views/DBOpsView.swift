@@ -452,11 +452,9 @@ struct DBOpsView: View {
 
     @ViewBuilder
     private var jobSection: some View {
-        if !serviceJobs.isEmpty {
-            FormSection("Operations") {
-                ForEach(serviceJobs.prefix(6)) { job in
-                    jobRow(job)
-                }
+        if let job = serviceJobs.first {
+            FormSection("Last operation") {
+                jobRow(job)
             }
         }
     }
