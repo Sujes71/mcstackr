@@ -17,12 +17,14 @@ struct QueueOpsView: View {
         case params(QueueAction, [String])
         case env(QueueEnv?)
         case result(QueueAction, String)
+        case customAction(QueueEnv, QueueCustom?)
 
         var id: String {
             switch self {
             case .params(let action, _): return "params-\(action.id)"
             case .env(let env): return "env-\(env?.name ?? "__new")"
             case .result(let action, _): return "result-\(action.id)"
+            case .customAction(let env, let action): return "custom-\(env.name)-\(action?.name ?? "__new")"
             }
         }
     }
@@ -42,10 +44,11 @@ struct QueueOpsView: View {
             byGroup[action.group, default: []].append(action)
         }
 
-        if let env, !env.isLocal, !env.customActions.isEmpty {
-            let group = "Custom"
-            if !order.contains(group) { order.append(group) }
-            for custom in env.customActions {
+        // The custom actions of the environment in use go in the last group,
+        // the same place they have in the DB operations.
+        if let env, !env.isLocal {
+            let group = order.last ?? "Custom"
+			for custom in env.customActions {
                 byGroup[group, default: []].append(QueueAction(
                     id: "custom:\(custom.name)",
                     label: custom.name,
@@ -95,6 +98,10 @@ struct QueueOpsView: View {
                 .environmentObject(state)
             case .result(let action, let output):
                 QueueResultSheet(action: action, output: output)
+            case .customAction(let env, let existing):
+                QueueCustomWizard(existing: existing) { draft in
+                    Task { await saveCustom(env, draft, existing) }
+                }
             }
         }
     }
@@ -177,6 +184,10 @@ struct QueueOpsView: View {
                     FormSection(group.group) {
                         ForEach(group.actions) { action in
                             actionRow(action)
+                        }
+
+                        if let env, !env.isLocal, group.group == groups.last?.group {
+                            addActionRow(env)
                         }
                     }
                 }
@@ -285,6 +296,31 @@ struct QueueOpsView: View {
         sheetTarget = .params(action, params)
     }
 
+    /// Saves a custom action of the environment in use.
+    private func saveCustom(_ env: QueueEnv, _ draft: QueueCustomDraft, _ existing: QueueCustom?) async {
+        errorText = nil
+        let updated: QueueOpsInfo?
+        if let existing {
+            updated = await state.updateQueueCustom(
+                service: service.name,
+                env: env.name,
+                action: existing.name,
+                draft: draft
+            )
+        } else {
+            updated = await state.addQueueCustom(
+                service: service.name,
+                env: env.name,
+                draft: draft
+            )
+        }
+        guard let updated else {
+            errorText = state.errorMessage ?? "Could not save the action."
+            return
+        }
+        info = updated
+    }
+
     private func run(_ action: QueueAction, values: [String: String]) async {
         errorText = nil
         guard let output = await state.runQueueOp(
@@ -297,6 +333,25 @@ struct QueueOpsView: View {
             return
         }
         sheetTarget = .result(action, output)
+    }
+
+    /// The row that adds a custom action, in the same place the DB
+    /// operations have it.
+    private func addActionRow(_ env: QueueEnv) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 26, height: 26)
+                .background(Theme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            ActionTextButton(title: "Add action", systemName: nil, tint: Theme.textMuted) {
+                sheetTarget = .customAction(env, nil)
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -456,23 +511,7 @@ struct QueueEnvWizard: View {
     @State private var confirmDelete = false
     @State private var localError: String?
     @State private var loaded = false
-    @State private var customTarget: QueueCustomTarget?
 
-    private enum QueueCustomTarget: Identifiable {
-        case edit(QueueCustom?)
-
-        var id: String {
-            switch self {
-            case .edit(let action): return "custom-\(action?.name ?? "__new")"
-            }
-        }
-
-        var action: QueueCustom? {
-            switch self {
-            case .edit(let action): return action
-            }
-        }
-    }
 
     private var isEdit: Bool { existing != nil }
     private var canSave: Bool {
@@ -491,11 +530,6 @@ struct QueueEnvWizard: View {
         .frame(width: 560, height: 560)
         .background(Theme.background)
         .onAppear(perform: prefill)
-        .sheet(item: $customTarget) { target in
-            QueueCustomWizard(existing: target.action) { draft in
-                Task { await saveCustom(draft) }
-            }
-        }
         .sheet(isPresented: $confirmDelete) {
             ConfirmSheet(
                 title: "Delete queue environment “\(existing?.name ?? "")”?",
@@ -538,48 +572,6 @@ struct QueueEnvWizard: View {
                         .font(.system(size: 11, design: .rounded))
                         .foregroundStyle(Theme.danger)
                         .fixedSize(horizontal: false, vertical: true)
-                }
-
-                FormSection("Custom actions") {
-                    if existing?.customActions.isEmpty != false {
-                        Text("Custom actions run a command of your own against this queue.")
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(Theme.textDim)
-                    }
-
-                    ForEach(existing?.customActions ?? []) { action in
-                        HStack(spacing: 10) {
-                            Image(systemName: "terminal")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Theme.violet)
-                                .frame(width: 20)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(action.name)
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(Theme.text)
-                                Text(action.command)
-                                    .font(Theme.monoSmall)
-                                    .foregroundStyle(Theme.textDim)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-
-                            Spacer(minLength: 8)
-
-                            ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit action") {
-                                customTarget = .edit(action)
-                            }
-
-                            ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete action") {
-                                Task { await deleteCustom(action) }
-                            }
-                        }
-                    }
-
-                    ActionTextButton(title: "Add action", systemName: "plus", tint: Theme.textMuted) {
-                        customTarget = .edit(nil)
-                    }
                 }
 
                 FormSection("Environment") {
@@ -714,44 +706,7 @@ struct QueueEnvWizard: View {
         dismiss()
     }
 
-    private func saveCustom(_ draft: QueueCustomDraft) async {
-        guard let existing else { return }
-        localError = nil
-        let updated: QueueOpsInfo?
-        if let original = customTarget?.action {
-            updated = await state.updateQueueCustom(
-                service: serviceName,
-                env: existing.name,
-                action: original.name,
-                draft: draft
-            )
-        } else {
-            updated = await state.addQueueCustom(
-                service: serviceName,
-                env: existing.name,
-                draft: draft
-            )
-        }
-        guard let updated else {
-            localError = state.errorMessage ?? "Could not save the action."
-            return
-        }
-        onSaved(updated)
-    }
 
-    private func deleteCustom(_ action: QueueCustom) async {
-        guard let existing else { return }
-        localError = nil
-        guard let updated = await state.deleteQueueCustom(
-            service: serviceName,
-            env: existing.name,
-            action: action.name
-        ) else {
-            localError = state.errorMessage ?? "Could not delete the action."
-            return
-        }
-        onSaved(updated)
-    }
 
     private func deleteEnv() async {
         guard let existing else { return }
