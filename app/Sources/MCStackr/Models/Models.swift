@@ -563,6 +563,7 @@ struct QueueRunPayload: Encodable {
 struct QueueRunResult: Codable {
     let output: String
     var table: QueueTable?
+    var finishedAt: String?
 }
 
 /// A table of the result of an operation.

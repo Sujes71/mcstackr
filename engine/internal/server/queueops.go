@@ -306,7 +306,10 @@ func (s *Server) handleQueueOpRun(w http.ResponseWriter, r *http.Request) {
 // output is a table, with its rows parsed.
 func queueRunResponse(out, actionID string) map[string]any {
 	clean := cleanQueueOutput(out)
-	response := map[string]any{"output": clean}
+	response := map[string]any{
+		"output":     clean,
+		"finishedAt": time.Now().UTC().Format(time.RFC3339),
+	}
 	if table := parseQueueTable(clean, actionID); table != nil {
 		response["table"] = table
 	}

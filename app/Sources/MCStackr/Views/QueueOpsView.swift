@@ -251,12 +251,12 @@ struct QueueOpsView: View {
 
     private func actionRow(_ action: QueueAction) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: action.destructive ? "trash" : "play.circle")
+            Image(systemName: icon(for: action))
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(action.enabled ? (action.destructive ? Theme.danger : Theme.info) : Theme.textDim)
+                .foregroundStyle(action.enabled ? tint(for: action) : Theme.textDim)
                 .frame(width: 26, height: 26)
                 .background(
-                    (action.enabled ? (action.destructive ? Theme.danger : Theme.info) : Theme.textDim).opacity(0.10),
+                    (action.enabled ? tint(for: action) : Theme.textDim).opacity(0.10),
                     in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                 )
 
@@ -277,7 +277,7 @@ struct QueueOpsView: View {
                 title: "Run",
                 systemName: "play.fill",
                 destructive: action.destructive,
-                tint: action.destructive ? Theme.danger : Theme.info
+                tint: tint(for: action)
             ) {
                 trigger(action)
             }
@@ -352,18 +352,25 @@ struct QueueOpsView: View {
     }
 
     /// The last operation: a table when the output is one, the text otherwise.
+    /// Same shape as the card of the DB operations.
     private func lastOperation(_ result: QueueRunResult) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.running)
                 Text(lastRunLabel)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Theme.text)
-                Spacer()
-                if let table = result.table {
-                    Text("\(table.rows.count) destinations")
+                    .foregroundStyle(Theme.running)
+                if let env {
+                    TechBadge(text: env.name, color: Theme.info)
+                }
+                if let stamp = result.finishedAt {
+                    Text(operationStamp(stamp))
                         .font(Theme.monoSmall)
                         .foregroundStyle(Theme.textDim)
                 }
+                Spacer(minLength: 0)
             }
 
             if let table = result.table {
@@ -420,6 +427,51 @@ struct QueueOpsView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// The icon of an operation, the same way the DB operations name theirs.
+    private func icon(for action: QueueAction) -> String {
+        switch action.id {
+        case "kafka-list-topics", "rabbitmq-list-queues", "activemq-list-destinations":
+            return "list.bullet.rectangle"
+        case "kafka-describe-topic", "kafka-describe-group":
+            return "info.circle"
+        case "kafka-create-topic", "rabbitmq-create-queue":
+            return "plus.circle"
+        case "kafka-send-message", "activemq-send-message":
+            return "paperplane"
+        case "kafka-consume-messages", "activemq-consume-messages":
+            return "arrow.down.circle"
+        case "kafka-list-groups":
+            return "person.2"
+        case "activemq-browse-queue":
+            return "eye"
+        case "rabbitmq-list-exchanges":
+            return "arrow.triangle.2.circlepath"
+        case "rabbitmq-list-bindings":
+            return "link"
+        case "rabbitmq-list-connections", "rabbitmq-list-channels", "rabbitmq-list-consumers":
+            return "network"
+        case "kafka-reset-offset":
+            return "arrow.uturn.backward"
+        default:
+            return action.destructive ? "trash" : "play.circle"
+        }
+    }
+
+    /// The colour of an operation: the destructive ones in red, the ones
+    /// that only read in green and the ones that write in blue.
+    private func tint(for action: QueueAction) -> Color {
+        if action.destructive { return Theme.danger }
+        switch action.id {
+        case "kafka-list-topics", "kafka-describe-topic", "kafka-list-groups",
+             "kafka-describe-group", "rabbitmq-list-queues", "rabbitmq-list-exchanges",
+             "rabbitmq-list-bindings", "rabbitmq-list-connections", "rabbitmq-list-channels",
+             "rabbitmq-list-consumers", "activemq-list-destinations", "activemq-browse-queue":
+            return Theme.running
+        default:
+            return Theme.info
         }
     }
 
