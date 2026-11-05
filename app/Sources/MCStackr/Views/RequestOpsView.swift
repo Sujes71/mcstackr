@@ -229,39 +229,74 @@ struct RequestOpsView: View {
                     .foregroundStyle(Theme.textDim)
 
                 Spacer()
+            }
 
-                if let env, env.name != "local" {
-                    ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Remove request environment") {
+            Menu {
+                ForEach(payload.envs) { env in
+                    Button {
+                        selectedEnv = env.name
+                    } label: {
+                        if env.name == selectedEnv {
+                            Label(env.name, systemImage: "checkmark")
+                        } else {
+                            Text(env.name)
+                        }
+                    }
+                }
+
+                Divider()
+
+                Button {
+                    sheetTarget = .newEnv
+                } label: {
+                    Label("New environment…", systemImage: "plus")
+                }
+
+                if let env = payload.envs.first(where: { $0.name == selectedEnv }), env.name != "local" {
+                    Button {
                         deleteTarget = .env(env.name)
+                    } label: {
+                        Label("Remove environment…", systemImage: "trash")
                     }
                 }
-            }
-
-            if let env = payload.envs.first(where: { $0.name == selectedEnv }) ?? payload.envs.first {
+            } label: {
                 HStack(spacing: 9) {
-                    Image(systemName: "shippingbox")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
-                    Text(env.name)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.text)
-                    Spacer(minLength: 8)
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            }
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Theme.accent.opacity(0.14))
+                        .frame(width: 26, height: 26)
+                        .overlay {
+                            Image(systemName: "shippingbox")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
 
-            if payload.envs.count > 1 {
-                Picker("Request environment", selection: $selectedEnv) {
-                    ForEach(payload.envs) { env in
-                        Text(env.name).tag(env.name)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(selectedEnv.isEmpty ? "No environment" : selectedEnv)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(1)
+                        Text("REQUEST ENVIRONMENT")
+                            .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                            .tracking(1.1)
+                            .foregroundStyle(Theme.textDim)
                     }
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Theme.textDim)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Theme.stroke, lineWidth: 1)
+                }
             }
+            .menuStyle(.borderlessButton)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -410,12 +445,6 @@ struct RequestOpsView: View {
                     Text(request.name)
                         .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                         .foregroundStyle(canRun(request) ? Theme.text : Theme.textDim)
-                    if !canRun(request) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Theme.danger)
-                            .help("Assign a value to the folder \(request.baseUrlName) first")
-                    }
                     if request.isLogin {
                         Image(systemName: hasToken ? "lock.open" : "lock")
                             .font(.system(size: 10, weight: .semibold))
