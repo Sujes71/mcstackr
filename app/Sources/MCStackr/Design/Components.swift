@@ -216,12 +216,10 @@ struct FormSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // The title sits on the left, with a short rule before it and the
-            // long one after it: --- Title --------------
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Rectangle()
                     .fill(Theme.stroke)
-                    .frame(width: 14, height: 1)
+                    .frame(height: 1)
                 Text(title)
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(Theme.text)
