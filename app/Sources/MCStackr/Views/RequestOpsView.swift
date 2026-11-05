@@ -1269,6 +1269,11 @@ struct RequestRunSheet: View {
         .onChange(of: state.runningRequests) { _, _ in
             isRunning = state.isRequestRunning(request, env: env.name)
         }
+        .onDisappear {
+            if isRunning {
+                state.markRequestWindowClosed(env: envName, request: request.name)
+            }
+        }
     }
 
     private var header: some View {
@@ -1357,6 +1362,9 @@ struct RequestRunSheet: View {
     private func run() {
         localError = nil
         isRunning = true
+        // The mark of a closed window belongs to the run that is starting.
+        state.clearRequestWindowClosed(env: envName, request: request.name)
+
         // The value the user wrote is the last one from now on: it is saved
         // when the request is launched.
         for (name, value) in values {
@@ -1372,9 +1380,19 @@ struct RequestRunSheet: View {
             if outcome == nil {
                 localError = failure ?? "Could not run the request."
             }
-            // The result is also reported with a notice, the same way the
-            // operations report theirs.
-            state.reportRequest(request, env: env, result: outcome, error: failure)
+            // The result is only reported with a notice when the window was
+            // closed while the request was running: if the window is still
+            // there, the response is already in it, and a request that was
+            // cancelled on purpose is not an alert.
+            if state.shouldReportRequest(env: env.name, request: request.name) {
+                let detail: String
+                if let failure, failure.lowercased().contains("cancel") {
+                    detail = "The request was cancelled when the window was closed."
+                } else {
+                    detail = failure ?? ""
+                }
+                state.reportRequest(request, env: env, result: outcome, error: detail)
+            }
             isRunning = false
             // The collection is refreshed, so the variables keep the value
             // they were just given.

@@ -32,6 +32,9 @@ final class AppState: ObservableObject {
     /// them. It survives the window being closed and opened again.
     @Published private(set) var runningRequests: Set<String> = []
     private var requestTasks: [String: Task<Void, Never>] = [:]
+    /// The windows of the requests that were closed while the request was
+    /// still running. Only those runs are reported with a notice.
+    private var closedRequestWindows: Set<String> = []
 
     /// The request environment in use and the ones available. The selector
     /// lives in the header, so both belong to the app state.
@@ -874,6 +877,22 @@ final class AppState: ObservableObject {
         runningRequests.remove(key)
         requestTasks.removeValue(forKey: key)
         return outcome
+    }
+
+    /// Marks that the window of a request was closed while it was running.
+    func markRequestWindowClosed(env: String, request: String) {
+        closedRequestWindows.insert(requestRunKey(env: env, request: request))
+    }
+
+    /// Clears the mark of a closed window: it belongs to one run only.
+    func clearRequestWindowClosed(env: String, request: String) {
+        closedRequestWindows.remove(requestRunKey(env: env, request: request))
+    }
+
+    /// Whether the result of a request has to be reported with a notice: it
+    /// does when the window was closed while the request was running.
+    func shouldReportRequest(env: String, request: String) -> Bool {
+        closedRequestWindows.contains(requestRunKey(env: env, request: request))
     }
 
     /// Whether a request is running right now.
