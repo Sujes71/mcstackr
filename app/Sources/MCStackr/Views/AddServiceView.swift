@@ -596,6 +596,11 @@ struct AddServiceView: View {
         }
         let cleanEnvVars = envVars.filter { !$0.key.trimmingCharacters(in: .whitespaces).isEmpty }
         let cleanVolumes = volumes.filter { !$0.target.trimmingCharacters(in: .whitespaces).isEmpty }
+        if cleanVolumes.isEmpty && serviceNeedsVolume(image.trimmingCharacters(in: .whitespaces)) {
+            localError = "A volume is required: the data of a database lives in it."
+            isSaving = false
+            return
+        }
 
         let added = await state.addService(
             name: name.trimmingCharacters(in: .whitespaces),
