@@ -62,8 +62,8 @@ struct EngineClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    func deleteVoid(_ path: String) async throws {
-        _ = try await perform(method: "DELETE", path: path, query: [], body: nil)
+    func deleteVoid(_ path: String, body: (any Encodable)? = nil) async throws {
+        _ = try await perform(method: "DELETE", path: path, query: [], body: body)
     }
 
     // MARK: - Streaming

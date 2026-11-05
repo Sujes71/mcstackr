@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -251,25 +252,41 @@ func (s *Server) handleRunRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := runRequestDef(def, baseURL, vars, token)
+	// The values the user wrote are saved as soon as the request is
+	// launched: if it is cancelled, or the window is closed, the value stays
+	// as the last one.
+	if err := s.persistRequestVars(profileName, req.Env, envIndex, req.Variables); err != nil {
+		writeError(w, statusForError(err), err.Error())
+		return
+	}
+
+	// The run can be cancelled: the context is kept until it finishes.
+	ctx, cancel := context.WithCancel(r.Context())
+	key := requestRunKey(req.Env, req.Request)
+	s.requestCancels.Store(key, cancel)
+	defer s.requestCancels.Delete(key)
+	defer cancel()
+
+	result, err := runRequestDef(ctx, def, baseURL, vars, token)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// A login request stores the token it got back, and the values the user
-	// typed are kept in the environment.
-	if err := s.persistRequestRun(profileName, req.Env, envIndex, req.Variables, result.Token); err != nil {
-		writeError(w, statusForError(err), err.Error())
-		return
+	// A login request stores the token it got back.
+	if result.Token != "" {
+		if err := s.persistRequestToken(profileName, req.Env, envIndex, result.Token); err != nil {
+			writeError(w, statusForError(err), err.Error())
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, result)
 }
 
-// persistRequestRun stores the prompted variables and the extracted token in
-// the request environment.
-func (s *Server) persistRequestRun(profileName, envName string, envIndex int, values map[string]string, token string) error {
+// persistRequestVars stores the variables the user wrote in the request
+// environment.
+func (s *Server) persistRequestVars(profileName, envName string, envIndex int, values map[string]string) error {
 	return s.store.Update(func(c *config.Config) error {
 		p, ok := c.GetProfile(profileName)
 		if !ok {
@@ -282,9 +299,22 @@ func (s *Server) persistRequestRun(profileName, envName string, envIndex int, va
 		for name, value := range values {
 			setRequestVar(env, name, value)
 		}
-		if token != "" {
-			setRequestVar(env, "_token", token)
+		p.UpdatedAt = time.Now()
+		return c.Save()
+	})
+}
+
+// persistRequestToken stores the token a login request extracted.
+func (s *Server) persistRequestToken(profileName, envName string, envIndex int, token string) error {
+	return s.store.Update(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return notFoundf("profile %q not found", profileName)
 		}
+		if envIndex < 0 || envIndex >= len(p.RequestEnvs) {
+			return notFoundf("request environment %q not found", envName)
+		}
+		setRequestVar(&p.RequestEnvs[envIndex], "_token", token)
 		p.UpdatedAt = time.Now()
 		return c.Save()
 	})
@@ -303,7 +333,7 @@ func setRequestVar(env *config.RequestEnv, name, value string) {
 // runRequestDef builds and runs a request, with the same substitution rules
 // as the original runtime: the variables of the environment and {token} are
 // replaced in the path, the query params, the headers and the body.
-func runRequestDef(def config.RequestDef, baseURL string, vars map[string]string, token string) (requestRunResponse, error) {
+func runRequestDef(ctx context.Context, def config.RequestDef, baseURL string, vars map[string]string, token string) (requestRunResponse, error) {
 	path := def.Path
 	if path != "" && !strings.HasPrefix(path, "/") {
 		path = "/" + path
@@ -331,7 +361,7 @@ func runRequestDef(def config.RequestDef, baseURL string, vars map[string]string
 	if method == "" {
 		method = http.MethodGet
 	}
-	httpReq, err := http.NewRequest(method, fullURL, body)
+	httpReq, err := http.NewRequestWithContext(ctx, method, fullURL, body)
 	if err != nil {
 		return requestRunResponse{}, fmt.Errorf("build request: %w", err)
 	}
@@ -426,6 +456,31 @@ func prettyBody(data []byte) string {
 		return pretty.String()
 	}
 	return string(data)
+}
+
+// requestRunKey identifies a run of the collection.
+func requestRunKey(env, request string) string {
+	return env + "/" + request
+}
+
+// handleCancelRequest stops a run that is in flight.
+func (s *Server) handleCancelRequest(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Env     string `json:"env"`
+		Request string `json:"request"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	key := requestRunKey(strings.TrimSpace(req.Env), strings.TrimSpace(req.Request))
+	value, ok := s.requestCancels.Load(key)
+	if !ok {
+		writeError(w, http.StatusNotFound, "the request is not running")
+		return
+	}
+	value.(context.CancelFunc)()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }
 
 // ── Folders (base URLs) ──────────────────────────────────────────────────────

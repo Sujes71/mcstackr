@@ -171,8 +171,10 @@ struct RequestOpsView: View {
                 .environmentObject(state)
             case .run(let request):
                 if let env {
-                    RequestRunSheet(request: request, env: env)
-                        .environmentObject(state)
+                    RequestRunSheet(request: request, env: env) {
+                        Task { await reload() }
+                    }
+                    .environmentObject(state)
                 }
             case .newEnv:
                 RequestEnvWizard { updated in
@@ -444,6 +446,9 @@ struct RequestOpsView: View {
             ActionIconButton(systemName: "play.fill", tint: Theme.info, help: runHelp(for: request)) {
                 trigger(request)
             }
+            // The play of the row always opens the window of the request,
+            // where the variables are: it is never disabled because it is
+            // already running.
             .disabled(!canRun(request))
             .opacity(canRun(request) ? 1 : 0.4)
 
@@ -470,8 +475,16 @@ struct RequestOpsView: View {
         !folderURL(for: request).isEmpty
     }
 
+    /// Whether the request is running right now, wherever its window is.
+    private func isRunning(_ request: RequestDefinition) -> Bool {
+        state.isRequestRunning(request, env: selectedEnv)
+    }
+
     private func runHelp(for request: RequestDefinition) -> String {
-        canRun(request) ? "Run request" : "Assign a value to the folder \(request.baseUrlName) first"
+        if isRunning(request) {
+            return "The request is running"
+        }
+        return canRun(request) ? "Run request" : "Assign a value to the folder \(request.baseUrlName) first"
     }
 
     private func methodTint(_ method: String) -> Color {
@@ -1107,6 +1120,9 @@ struct RequestRunSheet: View {
 
     let request: RequestDefinition
     let env: RequestEnvironment
+    /// Called when the run finishes, so the collection can be refreshed and
+    /// the variables keep the value they were given.
+    var onFinished: () -> Void = {}
 
     @State private var values: [String: String] = [:]
     @State private var result: RequestRunResult?
@@ -1247,6 +1263,9 @@ struct RequestRunSheet: View {
         .frame(width: 660, height: 640)
         .background(Theme.background)
         .onAppear(perform: prefill)
+        .onChange(of: state.runningRequests) { _, _ in
+            isRunning = state.isRequestRunning(request, env: env.name)
+        }
     }
 
     private var header: some View {
@@ -1297,8 +1316,18 @@ struct RequestRunSheet: View {
 
             Spacer()
 
-            ActionTextButton(title: "Cancel", systemName: nil) {
-                dismiss()
+            // One button for both: while the request runs it stops it, and
+            // when there is nothing running it closes the window.
+            ActionTextButton(
+                title: "Cancel",
+                systemName: isRunning ? "stop.fill" : nil,
+                destructive: isRunning
+            ) {
+                if isRunning {
+                    Task { await cancel() }
+                } else {
+                    dismiss()
+                }
             }
 
             ActionTextButton(title: isRunning ? "Running…" : "Run", systemName: "play.fill", prominent: true) {
@@ -1317,6 +1346,7 @@ struct RequestRunSheet: View {
         for name in variableNames {
             values[name] = env.value(for: name)
         }
+        isRunning = state.isRequestRunning(request, env: env.name)
     }
 
     /// The run of the window only unlocks when every variable has a value.
@@ -1330,9 +1360,9 @@ struct RequestRunSheet: View {
         localError = nil
         isRunning = true
         Task {
-            let (outcome, failure) = await state.runRequest(
+            let (outcome, failure) = await state.runRequestTracked(
                 env: env.name,
-                request: request.name,
+                request: request,
                 variables: values
             )
             result = outcome
@@ -1343,7 +1373,18 @@ struct RequestRunSheet: View {
             // operations report theirs.
             state.reportRequest(request, env: env, result: outcome, error: failure)
             isRunning = false
+            // The collection is refreshed, so the variables keep the value
+            // they were just given.
+            onFinished()
         }
+    }
+
+    /// Stops the request that is running.
+    private func cancel() async {
+        await state.cancelRequest(request, env: env.name)
+        isRunning = false
+        localError = nil
+        onFinished()
     }
 
     private func binding(for name: String) -> Binding<String> {

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,8 @@ type Server struct {
 	pf      *portForwardManager
 	lp      *localProcessManager
 	dbJobs  *dbJobRegistry
+	// The cancel of the request runs that are in flight.
+	requestCancels sync.Map
 }
 
 func New(token, version string) (*Server, error) {
@@ -61,6 +64,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/actions/{action}", s.handleServiceAction)
 	s.mux.HandleFunc("GET /api/profiles/{profile}/requests", s.handleRequests)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/requests/run", s.handleRunRequest)
+	s.mux.HandleFunc("DELETE /api/profiles/{profile}/requests/run", s.handleCancelRequest)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/requests/folders", s.handleAddFolder)
 	s.mux.HandleFunc("PATCH /api/profiles/{profile}/requests/folders/{folder}", s.handleUpdateFolder)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/requests/folders/{folder}", s.handleDeleteFolder)

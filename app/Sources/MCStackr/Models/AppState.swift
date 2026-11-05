@@ -28,6 +28,11 @@ final class AppState: ObservableObject {
     @Published var section: AppSection = .docker
     /// An action the header asked the current section to run.
     @Published var pendingSectionAction: SectionAction?
+    /// The requests that are running right now, with the task that follows
+    /// them. It survives the window being closed and opened again.
+    @Published private(set) var runningRequests: Set<String> = []
+    private var requestTasks: [String: Task<Void, Never>] = [:]
+
     /// The request environment in use and the ones available. The selector
     /// lives in the header, so both belong to the app state.
     @Published var selectedRequestEnv: String = ""
@@ -828,6 +833,57 @@ final class AppState: ObservableObject {
     /// are the ones the user confirmed. The error is returned instead of
     /// being left in the global error banner: a request that fails is
     /// reported with a notice, the same way an operation is.
+    /// Runs a request and keeps it in the list of running ones until it
+    /// finishes or it is cancelled.
+    func runRequestTracked(
+        env: String,
+        request: RequestDefinition,
+        variables: [String: String]
+    ) async -> (result: RequestRunResult?, error: String?) {
+        let key = requestRunKey(env: env, request: request.name)
+        guard !runningRequests.contains(key) else {
+            return (nil, "The request is already running.")
+        }
+
+        runningRequests.insert(key)
+        let outcome = await withTaskCancellationHandler {
+            await runRequest(env: env, request: request.name, variables: variables)
+        } onCancel: {
+            Task { await self.cancelRequestOnEngine(env: env, request: request.name) }
+        }
+        runningRequests.remove(key)
+        requestTasks.removeValue(forKey: key)
+        return outcome
+    }
+
+    /// Whether a request is running right now.
+    func isRequestRunning(_ request: RequestDefinition, env: String) -> Bool {
+        runningRequests.contains(requestRunKey(env: env, request: request.name))
+    }
+
+    /// Stops a request that is running.
+    func cancelRequest(_ request: RequestDefinition, env: String) async {
+        let key = requestRunKey(env: env, request: request.name)
+        requestTasks[key]?.cancel()
+        requestTasks.removeValue(forKey: key)
+        runningRequests.remove(key)
+        await cancelRequestOnEngine(env: env, request: request.name)
+    }
+
+    /// Asks the engine to stop the run.
+    func cancelRequestOnEngine(env: String, request: String) async {
+        guard let client, let profileName = selectedProfileName else { return }
+        _ = try? await client.deleteVoid(
+            "/api/profiles/\(profileName.pathComponentEncoded)/requests/run",
+            body: RequestRunPayload(env: env, request: request, variables: [:])
+        )
+    }
+
+    /// The key that identifies a request of the collection.
+    func requestRunKey(env: String, request: String) -> String {
+        "\(env)/\(request)"
+    }
+
     func runRequest(env: String, request: String, variables: [String: String]) async -> (result: RequestRunResult?, error: String?) {
         guard let client, let profileName = selectedProfileName else {
             return (nil, "The engine is not running.")
