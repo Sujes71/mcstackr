@@ -33,7 +33,13 @@ struct RootView: View {
         .frame(minWidth: 1080, minHeight: 700)
         .preferredColorScheme(.dark)
         .task { await state.bootstrap() }
-        .overlay(alignment: .top) { ErrorBanner() }
+        .overlay(alignment: .top) {
+            VStack(spacing: 8) {
+                ErrorBanner()
+                DBNoticeBanner()
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: state.dbNotices.map(\.id))
     }
 }
 

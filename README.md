@@ -83,6 +83,7 @@ All routes require `Authorization: Bearer <token>`.
 | GET | `/api/profiles/{p}/envs/{e}/services/{s}/dbops` | sync environments, actions and dumps for a DB service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/dbops/{export-schema,export-data,import-schema,import-data,truncate}` | start a DB operation job |
 | GET | `/api/profiles/{p}/envs/{e}/services/{s}/dbops/jobs/{id}` | DB operation job state |
+| GET | `/api/profiles/{p}/envs/{e}/services/{s}/dbops/jobs` | recent operations of a service (newest first) |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs` | add a sync environment (password encrypted at rest) |
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs/{name}` | update or rename one; omit `password` to keep it |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}/sync-envs/{name}` | remove one (dumps stay on disk) |

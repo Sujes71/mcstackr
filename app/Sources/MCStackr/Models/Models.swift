@@ -273,7 +273,7 @@ struct DBDump: Codable, Identifiable, Hashable {
     var id: String { file }
 }
 
-struct DBJob: Codable {
+struct DBJob: Codable, Identifiable {
     let id: String
     let state: String
     let output: String?
@@ -281,7 +281,34 @@ struct DBJob: Codable {
     let startedAt: String
     let finishedAt: String?
 
+    // Context of the operation. The engine keeps the jobs after the sheet
+    // that started them is closed, so the app can show them again.
+    var service: String? = nil
+    var syncEnv: String? = nil
+    var action: String? = nil
+    var label: String? = nil
+    // Where the job was started. The app keeps them so a job can still be
+    // followed after the user changes workspace.
+    var profile: String? = nil
+    var env: String? = nil
+
     var isRunning: Bool { state == "running" }
+    var isDone: Bool { state == "done" }
+    var isFailure: Bool { state == "error" }
+}
+
+/// A finished operation, surfaced as a notice while the user works elsewhere.
+struct DBJobNotice: Identifiable, Equatable {
+    let id: String
+    let service: String
+    let label: String
+    let syncEnv: String
+    let succeeded: Bool
+    let detail: String
+
+    var title: String {
+        succeeded ? "\(label) finished" : "\(label) failed"
+    }
 }
 
 struct DBJobRequest: Codable {

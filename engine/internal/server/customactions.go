@@ -224,7 +224,7 @@ func (s *Server) handleRunCustomAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job := s.dbJobs.start()
+	job := s.dbJobs.start(serviceName, req.SyncEnv, "custom:"+actionName, actionName)
 	syncEnv := *se
 	params := req.Params
 	go func() {

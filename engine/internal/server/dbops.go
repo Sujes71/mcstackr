@@ -72,6 +72,12 @@ type dbJobDTO struct {
 	Error      string `json:"error,omitempty"`
 	StartedAt  string `json:"startedAt"`
 	FinishedAt string `json:"finishedAt,omitempty"`
+	// Context of the operation, so the app can keep track of jobs that
+	// outlive the sheet that started them.
+	Service string `json:"service,omitempty"`
+	SyncEnv string `json:"syncEnv,omitempty"`
+	Action  string `json:"action,omitempty"`
+	Label   string `json:"label,omitempty"`
 }
 
 // dbJobRegistry keeps the in-flight and recent DB operations in memory.
@@ -87,13 +93,17 @@ func newDBJobRegistry() *dbJobRegistry {
 	return &dbJobRegistry{jobs: map[string]*dbJobDTO{}}
 }
 
-func (r *dbJobRegistry) start() *dbJobDTO {
+func (r *dbJobRegistry) start(service, syncEnv, action, label string) *dbJobDTO {
 	var raw [8]byte
 	_, _ = rand.Read(raw[:])
 	job := &dbJobDTO{
 		ID:        hex.EncodeToString(raw[:]),
 		State:     "running",
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
+		Service:   service,
+		SyncEnv:   syncEnv,
+		Action:    action,
+		Label:     label,
 	}
 
 	r.mu.Lock()
@@ -122,6 +132,25 @@ func (r *dbJobRegistry) finish(id, output string, err error) {
 	}
 	job.State = "done"
 	job.Output = output
+}
+
+// list returns the jobs of a service, newest first.
+func (r *dbJobRegistry) list(service string) []dbJobDTO {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	jobs := make([]dbJobDTO, 0, len(r.seq))
+	for i := len(r.seq) - 1; i >= 0; i-- {
+		job, ok := r.jobs[r.seq[i]]
+		if !ok {
+			continue
+		}
+		if service != "" && job.Service != service {
+			continue
+		}
+		jobs = append(jobs, *job)
+	}
+	return jobs
 }
 
 func (r *dbJobRegistry) get(id string) (dbJobDTO, bool) {
@@ -433,7 +462,7 @@ func (s *Server) handleDBOp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job := s.dbJobs.start()
+	job := s.dbJobs.start(serviceName, req.SyncEnv, action, dbActionLabel(action))
 	syncEnv := *se
 	go func() {
 		output, err := runDBOp(profileName, envName, svc, syncEnv, action)
@@ -441,6 +470,29 @@ func (s *Server) handleDBOp(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	writeJSON(w, http.StatusAccepted, job)
+}
+
+// dbActionLabel is the human name of a built-in operation.
+func dbActionLabel(action string) string {
+	switch action {
+	case "export-schema":
+		return "Export schema"
+	case "export-data":
+		return "Export data"
+	case "import-schema":
+		return "Import schema"
+	case "import-data":
+		return "Import data"
+	case "truncate":
+		return "Truncate tables"
+	default:
+		return action
+	}
+}
+
+func (s *Server) handleDBJobs(w http.ResponseWriter, r *http.Request) {
+	jobs := s.dbJobs.list(r.PathValue("service"))
+	writeJSON(w, http.StatusOK, jobs)
 }
 
 func (s *Server) handleDBJob(w http.ResponseWriter, r *http.Request) {

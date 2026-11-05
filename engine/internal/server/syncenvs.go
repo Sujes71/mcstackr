@@ -3,7 +3,10 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -122,6 +125,7 @@ func (s *Server) handleUpdateSyncEnv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	newName := origName
 	err := s.store.Update(func(c *config.Config) error {
 		svc, err := findService(c, profileName, envName, serviceName)
 		if err != nil {
@@ -142,12 +146,17 @@ func (s *Server) handleUpdateSyncEnv(w http.ResponseWriter, r *http.Request) {
 			return notFoundf("sync environment %q not found", origName)
 		}
 		se := req.toSyncEnv(dbType)
+		// The request only carries the connection fields. The custom actions
+		// of a sync environment are managed separately, so an edit of the
+		// connection details must not drop them.
+		se.CustomActions = svc.SyncEnvs[idx].CustomActions
 		if err := validateSyncEnv(se); err != nil {
 			return err
 		}
 		if se.Name != origName && svc.FindSyncEnv(se.Name) != nil {
 			return fmt.Errorf("sync environment %q already exists", se.Name)
 		}
+		newName = se.Name
 		if req.Password != nil {
 			if err := se.SetPassword(*req.Password); err != nil {
 				return err
@@ -168,12 +177,47 @@ func (s *Server) handleUpdateSyncEnv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The dumps live in a folder named after the sync environment. When it is
+	// renamed, that folder has to follow, or the dumps stay behind under the
+	// old name and the service looks like it lost them.
+	if newName != origName {
+		migrateDumpDir(profileName, envName, serviceName, origName, newName)
+	}
+
 	info, status, err := s.dbOpsInfo(profileName, envName, serviceName)
 	if err != nil {
 		writeError(w, status, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+// migrateDumpDir moves the dumps of a renamed sync environment to the folder
+// of its new name.
+func migrateDumpDir(profileName, envName, serviceName, origName, newName string) {
+	oldDir := config.SyncEnv{Name: origName}.DumpDir(profileName, envName, serviceName)
+	newDir := config.SyncEnv{Name: newName}.DumpDir(profileName, envName, serviceName)
+	info, err := os.Stat(oldDir)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	if _, err := os.Stat(newDir); err == nil {
+		// The target already has dumps: keep both, moving the old files in.
+		entries, err := os.ReadDir(oldDir)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if err := os.Rename(filepath.Join(oldDir, entry.Name()), filepath.Join(newDir, entry.Name())); err != nil {
+				log.Printf("migrate dump %s: %v", entry.Name(), err)
+			}
+		}
+		_ = os.Remove(oldDir)
+		return
+	}
+	if err := os.Rename(oldDir, newDir); err != nil {
+		log.Printf("rename dump dir %s -> %s: %v", oldDir, newDir, err)
+	}
 }
 
 func (s *Server) handleDeleteSyncEnv(w http.ResponseWriter, r *http.Request) {

@@ -69,6 +69,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("PATCH /api/profiles/{profile}/envs/{env}/services/{service}/sync-envs/{syncenv}/custom-actions/{action}", s.handleUpdateCustomAction)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/services/{service}/sync-envs/{syncenv}/custom-actions/{action}", s.handleDeleteCustomAction)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/dbops/custom/{action}", s.handleRunCustomAction)
+	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}/dbops/jobs", s.handleDBJobs)
 
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/local-processes", s.handleAddLocalProcess)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/local-processes/{name}", s.handleDeleteLocalProcess)

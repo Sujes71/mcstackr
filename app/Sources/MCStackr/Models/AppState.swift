@@ -25,7 +25,15 @@ final class AppState: ObservableObject {
     @Published private(set) var dockerDetail: EnvironmentDetail?
     @Published private(set) var catalog: [CatalogEntry] = []
 
-    @Published var section: AppSection = .docker {
+    @Published var section: AppSection = .docker
+    /// DB operations started from the app. They live in the engine, so they
+    /// keep running when the sheet is closed and the user works elsewhere.
+    @Published private(set) var dbJobs: [DBJob] = []
+    /// Finished operations, surfaced as notices. They stay until the user
+    /// dismisses them, so a result is never missed.
+    @Published private(set) var dbNotices: [DBJobNotice] = []
+    /// Bumped every time an operation finishes, so open sheets can refresh.
+    @Published private(set) var dbFinishedCount = 0 {
         didSet {
             guard section == .portForward else { return }
             Task { await refreshEnvironmentDetail() }
@@ -34,6 +42,7 @@ final class AppState: ObservableObject {
 
     private var client: EngineClient?
     private var pollTask: Task<Void, Never>?
+    private var dbPoller: Task<Void, Never>?
     private var didBootstrap = false
 
     // MARK: - Derived state
@@ -696,24 +705,118 @@ final class AppState: ObservableObject {
         }
     }
 
-    func runDBOp(service: String, syncEnv: String, action: String) async -> DBJob? {
+    /// Starts a DB operation and keeps track of it until it finishes.
+    func runDBOp(service: String, syncEnv: String, action: String, label: String? = nil) async -> DBJob? {
         guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
         do {
-            return try await client.post(
+            let job: DBJob = try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/\(action)",
                 body: DBJobRequest(syncEnv: syncEnv)
             )
+            track(job, service: service, syncEnv: syncEnv, label: label)
+            return job
         } catch {
             errorMessage = error.localizedDescription
             return nil
         }
     }
 
-    func fetchDBJob(service: String, id: String) async -> DBJob? {
-        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+    /// The jobs the engine keeps for a service, newest first.
+    func fetchDBJobs(service: String) async -> [DBJob] {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return [] }
+        let jobs: [DBJob] = (try? await client.get(
+            "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/jobs"
+        )) ?? []
+        return jobs
+    }
+
+    /// Registers a job and makes sure something polls it.
+    private func track(_ job: DBJob, service: String, syncEnv: String, label: String?) {
+        var tracked = job
+        tracked.service = job.service ?? service
+        tracked.syncEnv = job.syncEnv ?? syncEnv
+        if tracked.label == nil || tracked.label?.isEmpty == true {
+            tracked.label = label ?? job.action ?? "Operation"
+        }
+        tracked.profile = tracked.profile ?? selectedProfileName
+        tracked.env = tracked.env ?? dockerEnvironment?.name
+        dbJobs.removeAll { $0.id == tracked.id }
+        dbJobs.insert(tracked, at: 0)
+        ensureDBPoller()
+    }
+
+    /// Adopts the jobs the engine still remembers for a service, so a sheet
+    /// opened later shows the operations that already ran.
+    func adoptDBJobs(_ jobs: [DBJob], service: String) {
+        for job in jobs {
+            var adopted = job
+            adopted.service = adopted.service ?? service
+            adopted.profile = adopted.profile ?? selectedProfileName
+            adopted.env = adopted.env ?? dockerEnvironment?.name
+            if let index = dbJobs.firstIndex(where: { $0.id == adopted.id }) {
+                dbJobs[index] = adopted
+            } else {
+                dbJobs.append(adopted)
+            }
+        }
+        dbJobs.sort { $0.startedAt > $1.startedAt }
+        if dbJobs.contains(where: { $0.isRunning }) {
+            ensureDBPoller()
+        }
+    }
+
+    /// Polls every running job until they finish. The jobs live in the
+    /// engine, so this keeps working across sheets and workspace changes.
+    private func ensureDBPoller() {
+        guard dbPoller == nil else { return }
+        dbPoller = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                guard let self else { return }
+                await self.pollDBJobs()
+                if !self.dbJobs.contains(where: { $0.isRunning }) {
+                    self.dbPoller = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func pollDBJobs() async {
+        for index in dbJobs.indices where dbJobs[index].isRunning {
+            let current = dbJobs[index]
+            guard let service = current.service, !current.id.isEmpty else { continue }
+            let id = current.id
+            guard let latest = await fetchDBJob(profile: current.profile, env: current.env, service: service, id: id) else { continue }
+            dbJobs[index] = latest
+            if !latest.isRunning {
+                dbFinishedCount += 1
+                let notice = DBJobNotice(
+                    id: latest.id,
+                    service: service,
+                    label: latest.label ?? "Operation",
+                    syncEnv: latest.syncEnv ?? "",
+                    succeeded: latest.isDone,
+                    detail: latest.error ?? latest.output ?? ""
+                )
+                dbNotices.removeAll { $0.id == notice.id }
+                dbNotices.insert(notice, at: 0)
+                if dbNotices.count > 3 { dbNotices.removeLast() }
+            }
+        }
+    }
+
+    func dismissDBNotice(_ id: String) {
+        dbNotices.removeAll { $0.id == id }
+    }
+
+    func fetchDBJob(profile: String?, env: String?, service: String, id: String) async -> DBJob? {
+        guard let client else { return nil }
+        let profileName = profile ?? selectedProfileName
+        guard let profileName, let envName = env ?? dockerEnvironment?.name else { return nil }
         do {
             return try await client.get(
-                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/jobs/\(id)"
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/jobs/\(id.pathComponentEncoded)"
             )
         } catch {
             return nil
@@ -773,10 +876,12 @@ final class AppState: ObservableObject {
     ) async -> DBJob? {
         guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
         do {
-            return try await client.post(
+            let job: DBJob = try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/dbops/custom/\(name.pathComponentEncoded)",
                 body: CustomActionRunRequest(syncEnv: syncEnv, params: params)
             )
+            track(job, service: service, syncEnv: syncEnv, label: name)
+            return job
         } catch {
             errorMessage = error.localizedDescription
             return nil

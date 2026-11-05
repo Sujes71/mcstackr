@@ -10,8 +10,6 @@ struct DBOpsView: View {
 
     @State private var info: DBOpsInfo?
     @State private var selectedEnv: String = ""
-    @State private var job: DBJob?
-    @State private var jobLabel: String = ""
     @State private var confirm: Confirm?
     @State private var sheetTarget: SheetTarget?
     @State private var errorText: String?
@@ -76,8 +74,14 @@ struct DBOpsView: View {
         info?.syncEnvs.first { $0.name == selectedEnv }
     }
 
-    private var isBusy: Bool {
-        job?.isRunning == true
+    /// The operations of this service. They live in the engine, so they keep
+    /// running when the sheet is closed.
+    private var serviceJobs: [DBJob] {
+        state.dbJobs.filter { $0.service == service.name }
+    }
+
+    private var runningCount: Int {
+        serviceJobs.filter { $0.isRunning }.count
     }
 
     var body: some View {
@@ -96,7 +100,13 @@ struct DBOpsView: View {
         }
         .frame(width: 660, height: 680)
         .background(Theme.background)
-        .task { await reload(selectFirst: true) }
+        .task(id: service.name) {
+            await reload(selectFirst: true)
+            await adoptJobs()
+        }
+        .onChange(of: state.dbFinishedCount) { _, _ in
+            Task { await reload(selectFirst: false) }
+        }
         .sheet(item: $sheetTarget) { target in
             switch target {
             case .syncEnv(let existing):
@@ -362,13 +372,6 @@ struct DBOpsView: View {
 
             Spacer(minLength: 8)
 
-            if action.destructive == true {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Theme.danger)
-                    .help("Destructive")
-            }
-
             ActionTextButton(
                 title: "Run",
                 systemName: "play.fill",
@@ -377,8 +380,8 @@ struct DBOpsView: View {
             ) {
                 trigger(action)
             }
-            .disabled(!action.enabled || isBusy)
-            .opacity(!action.enabled || isBusy ? 0.4 : 1)
+            .disabled(!action.enabled)
+            .opacity(!action.enabled ? 0.4 : 1)
         }
         .padding(.vertical, 2)
     }
@@ -406,7 +409,7 @@ struct DBOpsView: View {
     }
 
     private func customActionRow(_ action: CustomAction, env: DBSyncEnv) -> some View {
-        let enabled = info?.running == true && !isBusy
+        let enabled = info?.running == true
         return HStack(spacing: 10) {
             Image(systemName: "terminal")
                 .font(.system(size: 12, weight: .semibold))
@@ -449,41 +452,55 @@ struct DBOpsView: View {
 
     @ViewBuilder
     private var jobSection: some View {
-        if let job {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    if job.isRunning {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(Theme.accent)
-                    } else {
-                        Image(systemName: job.state == "done" ? "checkmark.circle.fill" : "xmark.octagon.fill")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(job.state == "done" ? Theme.running : Theme.danger)
-                    }
-                    Text(job.isRunning ? "Running \(jobLabel)…" : (job.state == "done" ? "\(jobLabel) finished" : "\(jobLabel) failed"))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(job.state == "done" ? Theme.running : (job.isRunning ? Theme.text : Theme.danger))
-                    Spacer()
-                }
-
-                if let output = job.output, !output.isEmpty {
-                    Text(output)
-                        .font(Theme.monoSmall)
-                        .foregroundStyle(Theme.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let error = job.error, !error.isEmpty {
-                    Text(error)
-                        .font(Theme.monoSmall)
-                        .foregroundStyle(Theme.danger)
-                        .fixedSize(horizontal: false, vertical: true)
+        if !serviceJobs.isEmpty {
+            FormSection("Operations") {
+                ForEach(serviceJobs.prefix(6)) { job in
+                    jobRow(job)
                 }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .cardStyle()
         }
+    }
+
+    private func jobRow(_ job: DBJob) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if job.isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Theme.accent)
+                } else {
+                    Image(systemName: job.isDone ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(job.isDone ? Theme.running : Theme.danger)
+                }
+                Text(job.label ?? job.action ?? "Operation")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(job.isDone ? Theme.running : (job.isRunning ? Theme.text : Theme.danger))
+                if let syncEnv = job.syncEnv, !syncEnv.isEmpty {
+                    TechBadge(text: syncEnv, color: Theme.info)
+                }
+                Spacer()
+                Text(job.isRunning ? "running" : (job.isDone ? "done" : "failed"))
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textDim)
+            }
+
+            if let output = job.output, !output.isEmpty {
+                Text(output)
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let error = job.error, !error.isEmpty {
+                Text(error)
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle()
     }
 
     private func dumpsSection(_ env: DBSyncEnv) -> some View {
@@ -563,35 +580,14 @@ struct DBOpsView: View {
     private func run(_ action: DBAction, env: DBSyncEnv? = nil) {
         guard let target = env ?? syncEnv else { return }
         errorText = nil
-        jobLabel = action.label
-        job = DBJob(
-            id: "",
-            state: "running",
-            output: nil,
-            error: nil,
-            startedAt: "",
-            finishedAt: nil
-        )
-        Task { await start(action, env: target) }
-    }
-
-    private func start(_ action: DBAction, env: DBSyncEnv) async {
-        guard let started = await state.runDBOp(service: service.name, syncEnv: env.name, action: action.id) else {
-            errorText = state.errorMessage ?? "Could not start the operation."
-            job = nil
-            return
-        }
-        job = started
-        await poll(started.id, env: env)
-    }
-
-    private func poll(_ id: String, env: DBSyncEnv) async {
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            guard let latest = await state.fetchDBJob(service: service.name, id: id) else { continue }
-            job = latest
-            if !latest.isRunning {
-                await reload(selectFirst: false)
+        Task {
+            guard await state.runDBOp(
+                service: service.name,
+                syncEnv: target.name,
+                action: action.id,
+                label: action.label
+            ) != nil else {
+                errorText = state.errorMessage ?? "Could not start the operation."
                 return
             }
         }
@@ -608,24 +604,17 @@ struct DBOpsView: View {
 
     private func runCustom(_ action: CustomAction, env: DBSyncEnv, params: [String: String]) {
         errorText = nil
-        jobLabel = action.name
-        job = DBJob(id: "", state: "running", output: nil, error: nil, startedAt: "", finishedAt: nil)
-        Task { await startCustom(action, env: env, params: params) }
-    }
-
-    private func startCustom(_ action: CustomAction, env: DBSyncEnv, params: [String: String]) async {
-        guard let started = await state.runCustomAction(
-            service: service.name,
-            syncEnv: env.name,
-            name: action.name,
-            params: params
-        ) else {
-            errorText = state.errorMessage ?? "Could not start the action."
-            job = nil
-            return
+        Task {
+            guard await state.runCustomAction(
+                service: service.name,
+                syncEnv: env.name,
+                name: action.name,
+                params: params
+            ) != nil else {
+                errorText = state.errorMessage ?? "Could not start the action."
+                return
+            }
         }
-        job = started
-        await poll(started.id, env: env)
     }
 
     private func deleteCustom(_ action: CustomAction, env: DBSyncEnv) {
@@ -641,6 +630,11 @@ struct DBOpsView: View {
             }
             info = updated
         }
+    }
+
+    /// Picks up the operations the engine still remembers for this service.
+    private func adoptJobs() async {
+        state.adoptDBJobs(await state.fetchDBJobs(service: service.name), service: service.name)
     }
 
     private func reload(selectFirst: Bool) async {
