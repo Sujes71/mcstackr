@@ -798,7 +798,8 @@ final class AppState: ObservableObject {
                     label: latest.label ?? "Operation",
                     syncEnv: latest.syncEnv ?? "",
                     succeeded: latest.isDone,
-                    detail: latest.error ?? latest.output ?? ""
+                    detail: latest.error ?? latest.output ?? "",
+                    finishedAt: latest.finishedAt ?? latest.startedAt
                 )
             }
         }

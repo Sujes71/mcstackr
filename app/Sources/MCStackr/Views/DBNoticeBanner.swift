@@ -12,6 +12,17 @@ struct DBNoticeBanner: View {
         }
     }
 
+    /// The date and time the operation finished, small and dim.
+    private func stampLabel(_ iso: String) -> String {
+        guard !iso.isEmpty else { return "" }
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime]
+        guard let date = parser.date(from: iso) else { return "" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM HH:mm"
+        return formatter.string(from: date)
+    }
+
     private func noticeCard(_ notice: DBJobNotice) -> some View {
         HStack(alignment: .top, spacing: 10) {
                 Image(systemName: notice.succeeded ? "checkmark.circle.fill" : "xmark.octagon.fill")
@@ -19,9 +30,17 @@ struct DBNoticeBanner: View {
                     .foregroundStyle(notice.succeeded ? Theme.running : Theme.danger)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(notice.title)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.text)
+                    HStack(spacing: 8) {
+                        Text(notice.title)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.text)
+
+                        Spacer(minLength: 8)
+
+                        Text(stampLabel(notice.finishedAt))
+                            .font(Theme.monoSmall)
+                            .foregroundStyle(Theme.textDim)
+                    }
 
                     HStack(spacing: 6) {
                         Text(notice.service)

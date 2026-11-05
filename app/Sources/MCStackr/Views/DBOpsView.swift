@@ -483,9 +483,6 @@ struct DBOpsView: View {
                 Text(timeLabel(job))
                     .font(Theme.monoSmall)
                     .foregroundStyle(Theme.textDim)
-                Text(job.isRunning ? "running" : (job.isDone ? "done" : "failed"))
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textDim)
             }
 
             if let output = job.output, !output.isEmpty {

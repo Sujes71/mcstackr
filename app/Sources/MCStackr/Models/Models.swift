@@ -305,6 +305,8 @@ struct DBJobNotice: Identifiable, Equatable {
     let syncEnv: String
     let succeeded: Bool
     let detail: String
+    /// When the operation finished, so the notice can show the date.
+    let finishedAt: String
 
     var title: String {
         succeeded ? "\(label) finished" : "\(label) failed"
