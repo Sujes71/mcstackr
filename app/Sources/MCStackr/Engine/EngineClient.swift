@@ -52,9 +52,18 @@ struct EngineClient {
         _ = try await perform(method: "POST", path: path, query: [], body: body)
     }
 
+    func patch<T: Decodable>(_ path: String, body: (any Encodable)? = nil) async throws -> T {
+        let data = try await perform(method: "PATCH", path: path, query: [], body: body)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
     func delete<T: Decodable>(_ path: String) async throws -> T {
         let data = try await perform(method: "DELETE", path: path, query: [], body: nil)
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    func deleteVoid(_ path: String) async throws {
+        _ = try await perform(method: "DELETE", path: path, query: [], body: nil)
     }
 
     // MARK: - Streaming

@@ -21,6 +21,14 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var engineVersion = ""
     @Published private(set) var configPath = ""
+    @Published private(set) var environmentDetail: EnvironmentDetail?
+
+    @Published var section: AppSection = .docker {
+        didSet {
+            guard section == .aws else { return }
+            Task { await refreshEnvironmentDetail() }
+        }
+    }
 
     private var client: EngineClient?
     private var pollTask: Task<Void, Never>?
@@ -33,10 +41,24 @@ final class AppState: ObservableObject {
         return profiles.first { $0.name == selectedProfileName }
     }
 
-    var selectedEnvironment: ProfileEnvironment? {
-        guard let selectedProfile, let selectedEnvName else { return nil }
-        return selectedProfile.environments.first { $0.name == selectedEnvName }
+    /// The workspace is the Stackr profile: one project, two sections.
+    var workspaceName: String { selectedProfile?.name ?? "" }
+
+    /// Docker services always live in the environment named `local`.
+    var dockerEnvironment: ProfileEnvironment? {
+        guard let profile = selectedProfile else { return nil }
+        return profile.environments.first { $0.name == "local" }
+            ?? profile.environments.first { $0.serviceCount > 0 }
+            ?? profile.environments.first
     }
+
+    /// Everything that is not the Docker environment is exposed under AWS.
+    var awsEnvironment: ProfileEnvironment? {
+        guard let profile = selectedProfile else { return nil }
+        return profile.environments.first { $0.name != "local" }
+    }
+
+    var portForwardCount: Int { environmentDetail?.portForwards.count ?? awsEnvironment?.portForwardCount ?? 0 }
 
     var services: [ServiceStatus] {
         status?.services ?? []
@@ -88,25 +110,29 @@ final class AppState: ObservableObject {
 
     // MARK: - Selection
 
-    func select(profile: Profile, env: ProfileEnvironment) {
-        let changed = selectedProfileName != profile.name || selectedEnvName != env.name
+    func select(profile: Profile) {
+        let changed = selectedProfileName != profile.name
         selectedProfileName = profile.name
-        selectedEnvName = env.name
+        let env = profile.environments.first { $0.name == "local" }
+            ?? profile.environments.first { $0.serviceCount > 0 }
+            ?? profile.environments.first
+        selectedEnvName = env?.name
         if changed {
             status = nil
-            Task { await refreshStatus() }
+            environmentDetail = nil
+        }
+        Task {
+            await refreshStatus()
+            if section == .aws {
+                await refreshEnvironmentDetail()
+            }
         }
     }
 
-    func select(profile: Profile) {
-        let env = profile.environments.first { $0.name == profile.activeEnv }
-            ?? profile.environments.first
-        if let env {
-            select(profile: profile, env: env)
-        } else {
-            selectedProfileName = profile.name
-            selectedEnvName = nil
-            status = nil
+    func selectSection(_ newSection: AppSection) {
+        section = newSection
+        if newSection == .aws {
+            Task { await refreshEnvironmentDetail() }
         }
     }
 
@@ -120,6 +146,7 @@ final class AppState: ObservableObject {
             errorMessage = error.localizedDescription
         }
         await refreshStatus()
+        await refreshEnvironmentDetail()
     }
 
     func refreshHealth() async {
@@ -153,6 +180,25 @@ final class AppState: ObservableObject {
         }
     }
 
+    func refreshEnvironmentDetail() async {
+        guard let client,
+              let profileName = selectedProfileName,
+              let env = awsEnvironment else {
+            environmentDetail = nil
+            return
+        }
+        do {
+            let detail: EnvironmentDetail = try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)"
+            )
+            if selectedProfileName == profileName {
+                environmentDetail = detail
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func reloadProfiles() async throws {
         guard let client else { return }
         let loaded: [Profile] = try await client.get("/api/profiles")
@@ -179,7 +225,8 @@ final class AppState: ObservableObject {
         }
 
         if !profile.environments.contains(where: { $0.name == selectedEnvName }) {
-            let env = profile.environments.first { $0.name == profile.activeEnv }
+            let env = profile.environments.first { $0.name == "local" }
+                ?? profile.environments.first { $0.serviceCount > 0 }
                 ?? profile.environments.first
             self.selectedEnvName = env?.name
             status = nil
@@ -206,17 +253,20 @@ final class AppState: ObservableObject {
         }
     }
 
-    func deleteService(_ service: ServiceStatus) async {
-        guard let client, let profileName = selectedProfileName, let envName = selectedEnvName else { return }
-        await run(action: "delete \(service.name)") {
+    func deleteService(named name: String) async -> Bool {
+        guard let client, let profileName = selectedProfileName, let envName = selectedEnvName else { return false }
+        var success = false
+        await run(action: "delete \(name)") {
             let _: Profile = try await client.delete(
-                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services/\(service.name.pathComponentEncoded)"
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services/\(name.pathComponentEncoded)"
             )
             try await self.reloadProfiles()
+            success = true
         }
+        return success
     }
 
-    func createProfile(name: String, description: String, environments: [String]) async -> Bool {
+    func createWorkspace(name: String, description: String) async -> Bool {
         guard let client else { return false }
         do {
             let profile: Profile = try await client.post(
@@ -224,7 +274,7 @@ final class AppState: ObservableObject {
                 body: CreateProfileRequest(
                     name: name,
                     description: description,
-                    environments: environments
+                    environments: ["local", "dev"]
                 )
             )
             try await reloadProfiles()
@@ -239,18 +289,18 @@ final class AppState: ObservableObject {
         }
     }
 
-    func createEnvironment(name: String) async -> Bool {
+    func deleteWorkspace() async -> Bool {
         guard let client, let profileName = selectedProfileName else { return false }
+        runningAction = "delete workspace"
+        defer { runningAction = nil }
         do {
-            let updated: Profile = try await client.post(
-                "/api/profiles/\(profileName.pathComponentEncoded)/envs",
-                body: CreateEnvironmentRequest(name: name)
-            )
+            try await client.deleteVoid("/api/profiles/\(profileName.pathComponentEncoded)")
+            selectedProfileName = nil
+            selectedEnvName = nil
+            status = nil
+            environmentDetail = nil
             try await reloadProfiles()
-            if let env = updated.environments.first(where: { $0.name == name }),
-               let profile = profiles.first(where: { $0.name == updated.name }) {
-                select(profile: profile, env: env)
-            }
+            await refreshStatus()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -271,6 +321,40 @@ final class AppState: ObservableObject {
             let _: Profile = try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services",
                 body: CreateServiceRequest(name: name, image: image, tag: tag, ports: ports)
+            )
+            try await reloadProfiles()
+            await refreshStatus()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func serviceConfig(named name: String) async -> ServiceConfig? {
+        guard let client, let profileName = selectedProfileName, let envName = selectedEnvName else { return nil }
+        do {
+            return try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services/\(name.pathComponentEncoded)"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func updateService(
+        named name: String,
+        image: String,
+        tag: String,
+        ports: [PortConfig],
+        envVars: [EnvVarConfig]
+    ) async -> Bool {
+        guard let client, let profileName = selectedProfileName, let envName = selectedEnvName else { return false }
+        do {
+            let _: Profile = try await client.patch(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(envName.pathComponentEncoded)/services/\(name.pathComponentEncoded)",
+                body: UpdateServiceRequest(image: image, tag: tag, ports: ports, envVars: envVars)
             )
             try await reloadProfiles()
             await refreshStatus()

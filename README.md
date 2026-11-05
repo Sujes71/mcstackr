@@ -4,8 +4,16 @@ Native macOS app for the Stackr environment manager. Same domain, same config,
 same power — with a real UI.
 
 MCStackr is a SwiftUI front end over a local Go engine. Both the app and the
-existing `stackr` CLI read and write `~/.stackr/config.yaml`, so profiles,
-environments, services and encrypted credentials are shared.
+existing `stackr` CLI read and write `~/.stackr/config.yaml`, so services and
+encrypted credentials are shared.
+
+The UI is workspace-first. A **workspace** maps to one Stackr profile and has
+two sections:
+
+- **Docker** — the environment named `local`: compose services, live status,
+  logs and lifecycle actions.
+- **AWS** — every other environment (`dev`, `staging`, …): Kubernetes
+  port-forwards and cloud workloads. Read-only in this slice.
 
 ## Architecture
 
@@ -57,13 +65,17 @@ All routes require `Authorization: Bearer <token>`.
 |---|---|---|
 | GET | `/api/health` | engine version, Docker availability, config path |
 | GET | `/api/profiles` | profiles with environments |
-| POST | `/api/profiles` | create a profile |
+| POST | `/api/profiles` | create a profile (workspace) |
+| DELETE | `/api/profiles/{p}` | delete a profile (best-effort container stop) |
 | POST | `/api/profiles/{p}/envs` | add an environment |
+| GET | `/api/profiles/{p}/envs/{e}` | environment detail (port-forwards, processes) |
 | GET | `/api/profiles/{p}/envs/{e}/status` | merged config + container status |
 | GET | `/api/profiles/{p}/envs/{e}/compose` | generated compose YAML |
 | GET | `/api/profiles/{p}/envs/{e}/logs` | SSE log stream |
 | POST | `/api/profiles/{p}/envs/{e}/actions/{up,down,restart}` | environment lifecycle |
 | POST | `/api/profiles/{p}/envs/{e}/services` | add a service |
+| GET | `/api/profiles/{p}/envs/{e}/services/{s}` | service config (image, ports, env) |
+| PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
 | GET | `/api/hub/search?q=` | Docker Hub search |
@@ -72,9 +84,9 @@ All routes require `Authorization: Bearer <token>`.
 
 ## Scope of this slice
 
-Implemented: profiles, environments, Docker service status, lifecycle actions,
-live logs, Docker Hub search, add/remove services, shared config, engine
-lifecycle.
+Implemented: workspace switcher (create/delete), Docker and AWS sections, Docker
+service status, lifecycle actions, live logs, Docker Hub search, add/edit/remove
+services, shared config, engine lifecycle.
 
-Next slices: Kubernetes port-forward + resource manager, DB operations, queues,
-MockServer, request collections, git operations.
+Next slices: Kubernetes port-forward + resource manager (AWS section), DB
+operations, queues, MockServer, request collections, git operations.

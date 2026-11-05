@@ -2,70 +2,51 @@ import SwiftUI
 
 struct SidebarView: View {
     @EnvironmentObject private var state: AppState
-    @State private var showNewProfile = false
+
+    @State private var showNewWorkspace = false
+    @State private var confirmDelete = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             brand
                 .padding(.horizontal, 18)
                 .padding(.top, 44)
-                .padding(.bottom, 22)
+                .padding(.bottom, 18)
 
-            HStack {
-                Text("PROFILES")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .tracking(1.4)
-                    .foregroundStyle(Theme.textDim)
-                Spacer()
-                Button {
-                    showNewProfile = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 22, height: 22)
-                        .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .help("New profile")
+            workspaceSwitcher
+                .padding(.horizontal, 14)
+                .padding(.bottom, 18)
+
+            nav
+                .padding(.horizontal, 12)
+
+            if state.profiles.isEmpty {
+                emptyWorkspace
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 8)
-
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(state.profiles) { profile in
-                        SidebarProfileRow(
-                            profile: profile,
-                            isSelected: state.selectedProfileName == profile.name
-                        )
-                        .onTapGesture {
-                            state.select(profile: profile)
-                        }
-
-                        if state.selectedProfileName == profile.name {
-                            environmentList(for: profile)
-                        }
-                    }
-
-                    if state.profiles.isEmpty {
-                        emptyProfiles
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-            }
-            .scrollIndicators(.hidden)
 
             Spacer(minLength: 10)
 
             footer
         }
-        .frame(width: 272)
+        .frame(width: 240)
         .background(Theme.sidebar)
-        .sheet(isPresented: $showNewProfile) {
-            NewProfileView()
+        .sheet(isPresented: $showNewWorkspace) {
+            NewWorkspaceView()
                 .environmentObject(state)
+        }
+        .confirmationDialog(
+            "Delete workspace?",
+            isPresented: $confirmDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \(state.workspaceName)", role: .destructive) {
+                Task { _ = await state.deleteWorkspace() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This stops its containers and removes its config from ~/.stackr. This cannot be undone.")
         }
     }
 
@@ -100,37 +81,154 @@ struct SidebarView: View {
         }
     }
 
-    private func environmentList(for profile: Profile) -> some View {
-        VStack(spacing: 2) {
-            ForEach(profile.environments) { env in
-                SidebarEnvRow(
-                    env: env,
-                    isSelected: state.selectedEnvName == env.name
-                )
-                .onTapGesture {
-                    state.select(profile: profile, env: env)
+    private var workspaceSwitcher: some View {
+        Menu {
+            ForEach(state.profiles) { profile in
+                Button {
+                    state.select(profile: profile)
+                } label: {
+                    if profile.name == state.selectedProfileName {
+                        Label(profile.name, systemImage: "checkmark")
+                    } else {
+                        Text(profile.name)
+                    }
                 }
             }
+
+            Divider()
+
+            Button {
+                showNewWorkspace = true
+            } label: {
+                Label("New workspace…", systemImage: "plus")
+            }
+
+            Button(role: .destructive) {
+                confirmDelete = true
+            } label: {
+                Label("Delete workspace…", systemImage: "trash")
+            }
+            .disabled(state.selectedProfile == nil)
+        } label: {
+            HStack(spacing: 9) {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Theme.accent.opacity(0.14))
+                    .frame(width: 26, height: 26)
+                    .overlay {
+                        Text(initials)
+                            .font(.system(size: 10, weight: .black, design: .rounded))
+                            .foregroundStyle(Theme.accent)
+                    }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(state.workspaceName.isEmpty ? "No workspace" : state.workspaceName)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                    Text("WORKSPACE")
+                        .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                        .tracking(1.1)
+                        .foregroundStyle(Theme.textDim)
+                }
+
+                Spacer(minLength: 4)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Theme.textDim)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Theme.stroke, lineWidth: 1)
+            }
         }
-        .padding(.leading, 14)
-        .padding(.top, 2)
-        .padding(.bottom, 6)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var emptyProfiles: some View {
+    private var initials: String {
+        let letters = state.workspaceName.prefix(2)
+        return letters.isEmpty ? "—" : letters.uppercased()
+    }
+
+    private var nav: some View {
+        VStack(spacing: 3) {
+            sectionRow(.docker, badge: state.runningCount > 0 ? "\(state.runningCount)" : nil)
+            sectionRow(.aws, badge: state.portForwardCount > 0 ? "\(state.portForwardCount)" : nil)
+        }
+    }
+
+    private func sectionRow(_ section: AppSection, badge: String?) -> some View {
+        let selected = state.section == section
+        return Button {
+            state.selectSection(section)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: section.systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(selected ? Theme.accent : Theme.textMuted)
+                    .frame(width: 18)
+
+                Text(section.title)
+                    .font(.system(size: 12.5, weight: selected ? .semibold : .medium, design: .rounded))
+                    .foregroundStyle(selected ? Theme.text : Theme.textMuted)
+
+                Spacer(minLength: 4)
+
+                if let badge {
+                    Text(badge)
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(selected ? Theme.accentInk : Theme.textDim)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(selected ? Theme.accent : Theme.field, in: Capsule())
+                } else if section == .aws {
+                    Text("SOON")
+                        .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.textDim)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Theme.field, in: Capsule())
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(selected ? Theme.surface : .clear)
+            )
+            .overlay {
+                if selected {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(Theme.stroke, lineWidth: 1)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var emptyWorkspace: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("No profiles yet")
+            Text("No workspace yet")
                 .font(Theme.title(12))
                 .foregroundStyle(Theme.textMuted)
-            Text("A profile groups the environments, services and operations for one product.")
+            Text("Create one to start defining Docker services.")
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.textDim)
                 .fixedSize(horizontal: false, vertical: true)
+            ActionTextButton(title: "New workspace", systemName: "plus", prominent: true) {
+                showNewWorkspace = true
+            }
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
-        .padding(.top, 6)
     }
 
     private var footer: some View {
@@ -168,106 +266,5 @@ struct SidebarView: View {
             .padding(.vertical, 13)
         }
         .background(Theme.backgroundLift)
-    }
-}
-
-// MARK: - Rows
-
-private struct SidebarProfileRow: View {
-    let profile: Profile
-    let isSelected: Bool
-
-    @State private var hovering = false
-
-    private var initials: String {
-        let letters = profile.name.prefix(2)
-        return letters.uppercased()
-    }
-
-    private var serviceCount: Int {
-        profile.environments.reduce(0) { $0 + $1.serviceCount }
-    }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? Theme.accent.opacity(0.16) : Theme.field)
-                .frame(width: 30, height: 30)
-                .overlay {
-                    Text(initials)
-                        .font(.system(size: 11, weight: .black, design: .rounded))
-                        .foregroundStyle(isSelected ? Theme.accent : Theme.textMuted)
-                }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(profile.name)
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(isSelected ? Theme.text : Theme.textMuted)
-                    .lineLimit(1)
-                Text("\(profile.environments.count) envs · \(serviceCount) services")
-                    .font(.system(size: 9.5, design: .monospaced))
-                    .foregroundStyle(Theme.textDim)
-            }
-
-            Spacer(minLength: 4)
-
-            Image(systemName: isSelected ? "chevron.down" : "chevron.right")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(isSelected ? Theme.accent : Theme.textDim)
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isSelected ? Theme.surface : (hovering ? Theme.surfaceHover.opacity(0.55) : .clear))
-        )
-        .overlay {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Theme.stroke, lineWidth: 1)
-            }
-        }
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-    }
-}
-
-private struct SidebarEnvRow: View {
-    let env: ProfileEnvironment
-    let isSelected: Bool
-
-    @State private var hovering = false
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Rectangle()
-                .fill(isSelected ? Theme.accent : Theme.strokeStrong)
-                .frame(width: 2, height: 16)
-                .clipShape(Capsule())
-
-            Text(env.name)
-                .font(.system(size: 11.5, weight: isSelected ? .semibold : .regular, design: .rounded))
-                .foregroundStyle(isSelected ? Theme.text : Theme.textMuted)
-
-            if env.serviceCount > 0 {
-                Text("\(env.serviceCount)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(isSelected ? Theme.accentInk : Theme.textDim)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(isSelected ? Theme.accent : Theme.field, in: Capsule())
-            }
-
-            Spacer()
-        }
-        .padding(.leading, 8)
-        .padding(.trailing, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(hovering && !isSelected ? Theme.surfaceHover.opacity(0.5) : .clear)
-        )
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
     }
 }

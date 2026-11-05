@@ -6,7 +6,7 @@ struct MainContentView: View {
 
     @State private var showAddService = false
     @State private var logTarget: LogTarget?
-    @State private var pendingDelete: ServiceStatus?
+    @State private var editingService: ServiceStatus?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,33 +24,27 @@ struct MainContentView: View {
             LogsSheet(title: target.title, service: target.service)
                 .environmentObject(state)
         }
-        .confirmationDialog(
-            pendingDelete.map { "Delete \($0.name)?" } ?? "Delete service?",
-            isPresented: Binding(
-                get: { pendingDelete != nil },
-                set: { if !$0 { pendingDelete = nil } }
-            ),
-            presenting: pendingDelete
-        ) { service in
-            Button("Delete service", role: .destructive) {
-                Task { await state.deleteService(service) }
-                pendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) { pendingDelete = nil }
-        } message: { service in
-            Text("This removes \(service.name) from the profile config. It does not delete running containers or volumes.")
+        .sheet(item: $editingService) { service in
+            ServiceEditorView(service: service)
+                .environmentObject(state)
         }
     }
 
     @ViewBuilder
     private var content: some View {
         if state.selectedProfile == nil {
-            NoProfileView()
-        } else if let env = state.selectedEnvironment, env.serviceCount == 0 {
-            EmptyEnvironmentView(
-                envName: env.name,
-                onAdd: { showAddService = true }
-            )
+            NoWorkspaceView()
+        } else if state.section == .aws {
+            AWSView()
+        } else {
+            dockerContent
+        }
+    }
+
+    @ViewBuilder
+    private var dockerContent: some View {
+        if let env = state.dockerEnvironment, env.serviceCount == 0 {
+            EmptyDockerView(onAdd: { showAddService = true })
         } else if state.services.isEmpty {
             VStack(spacing: 14) {
                 ProgressView()
@@ -69,20 +63,20 @@ struct MainContentView: View {
                     }
 
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 300), spacing: 14)],
+                        columns: [GridItem(.adaptive(minimum: 320), spacing: 14)],
                         spacing: 14
                     ) {
                         ForEach(state.services) { service in
                             ServiceCard(
                                 service: service,
                                 isBusy: state.runningAction != nil,
+                                onOpen: { editingService = service },
                                 onLogs: {
                                     logTarget = LogTarget(
                                         title: "\(service.name) · logs",
                                         service: service.name
                                     )
-                                },
-                                onDelete: { pendingDelete = service }
+                                }
                             )
                         }
                     }
@@ -106,133 +100,251 @@ private struct HeaderView: View {
     @EnvironmentObject private var state: AppState
     @Binding var showAddService: Bool
 
+    private var isDocker: Bool { state.section == .docker }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 10) {
-                        Text(state.selectedProfile?.name ?? "Stackr")
-                            .font(Theme.display(28))
-                            .foregroundStyle(Theme.text)
-                            .lineLimit(1)
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    Text(state.section.title)
+                        .font(Theme.display(28))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
 
-                        if state.hasRunningServices {
-                            Text("LIVE")
-                                .font(.system(size: 8.5, weight: .black, design: .rounded))
-                                .tracking(1.2)
-                                .foregroundStyle(Theme.accentInk)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Theme.accent, in: Capsule())
-                        }
-                    }
-
-                    Text(subtitle)
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundStyle(Theme.textMuted)
-                        .lineLimit(2)
-                }
-
-                Spacer(minLength: 12)
-
-                HStack(spacing: 8) {
-                    ActionIconButton(
-                        systemName: "arrow.clockwise",
-                        tint: Theme.info,
-                        help: "Refresh"
-                    ) {
-                        Task { await state.refreshAll() }
-                    }
-                    .disabled(state.isRefreshing)
-
-                    if let env = state.selectedEnvironment, env.serviceCount > 0 {
-                        ActionTextButton(
-                            title: "Start all",
-                            systemName: "play.fill",
-                            prominent: true
-                        ) {
-                            Task { await state.performEnvAction("up") }
-                        }
-
-                        ActionTextButton(title: "Restart", systemName: "arrow.triangle.2.circlepath") {
-                            Task { await state.performEnvAction("restart") }
-                        }
-
-                        ActionTextButton(title: "Stop", systemName: "stop.fill") {
-                            Task { await state.performEnvAction("down") }
-                        }
-
-                        ActionTextButton(title: "Service", systemName: "plus") {
-                            showAddService = true
-                        }
-                    } else if state.selectedProfile != nil {
-                        ActionTextButton(title: "Add service", systemName: "plus", prominent: true) {
-                            showAddService = true
-                        }
+                    if isDocker, state.hasRunningServices {
+                        Text("LIVE")
+                            .font(.system(size: 8.5, weight: .black, design: .rounded))
+                            .tracking(1.2)
+                            .foregroundStyle(Theme.accentInk)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Theme.accent, in: Capsule())
                     }
                 }
-                .disabled(state.runningAction != nil)
-                .opacity(state.runningAction != nil ? 0.55 : 1)
+
+                Text(subtitle)
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
             }
 
-            if let profile = state.selectedProfile, profile.environments.count > 0 {
-                EnvironmentChips(profile: profile)
+            Spacer(minLength: 12)
+
+            HStack(spacing: 8) {
+                ActionIconButton(
+                    systemName: "arrow.clockwise",
+                    tint: Theme.info,
+                    help: "Refresh"
+                ) {
+                    Task { await state.refreshAll() }
+                }
+                .disabled(state.isRefreshing)
+
+                if isDocker {
+                    dockerActions
+                }
             }
+            .fixedSize(horizontal: true, vertical: false)
+            .disabled(state.runningAction != nil)
+            .opacity(state.runningAction != nil ? 0.55 : 1)
         }
         .padding(.horizontal, 26)
         .padding(.bottom, 18)
     }
 
+    @ViewBuilder
+    private var dockerActions: some View {
+        if state.selectedProfile != nil, let env = state.dockerEnvironment, env.serviceCount > 0 {
+            if state.runningCount > 0 {
+                ActionTextButton(title: "Restart all", systemName: "arrow.triangle.2.circlepath") {
+                    Task { await state.performEnvAction("restart") }
+                }
+                ActionTextButton(title: "Stop all", systemName: "stop.fill") {
+                    Task { await state.performEnvAction("down") }
+                }
+            } else {
+                ActionTextButton(title: "Start all", systemName: "play.fill", prominent: true) {
+                    Task { await state.performEnvAction("up") }
+                }
+            }
+
+            ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add service") {
+                showAddService = true
+            }
+        } else if state.selectedProfile != nil {
+            ActionTextButton(title: "Add service", systemName: "plus", prominent: true) {
+                showAddService = true
+            }
+        }
+    }
+
     private var subtitle: String {
         guard let profile = state.selectedProfile else {
-            return "Create your first profile to group environments, services and operations."
+            return "Create a workspace to start defining your stack."
         }
-        if let description = profile.description, !description.isEmpty {
-            return description
+
+        switch state.section {
+        case .docker:
+            let total = profile.environments.reduce(0) { $0 + $1.serviceCount }
+            if let description = profile.description, !description.isEmpty {
+                return "\(description) · \(total) services · \(state.runningCount) running"
+            }
+            return "\(total) services · \(state.runningCount) running"
+        case .aws:
+            let forwards = state.portForwardCount
+            if let description = profile.description, !description.isEmpty {
+                return "\(description) · \(forwards) port-forwards"
+            }
+            return "\(forwards) port-forwards · Kubernetes and cloud workloads"
         }
-        let total = profile.environments.reduce(0) { $0 + $1.serviceCount }
-        return "\(profile.environments.count) environments · \(total) services · \(state.runningCount) running"
     }
 }
 
-private struct EnvironmentChips: View {
+// MARK: - AWS
+
+private struct AWSView: View {
     @EnvironmentObject private var state: AppState
-    let profile: Profile
 
     var body: some View {
-        HStack(spacing: 7) {
-            ForEach(profile.environments) { env in
-                let selected = state.selectedEnvName == env.name
-                Button {
-                    state.select(profile: profile, env: env)
-                } label: {
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(selected ? Theme.accent : Theme.textDim)
-                            .frame(width: 5, height: 5)
-                        Text(env.name)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        if env.serviceCount > 0 {
-                            Text("\(env.serviceCount)")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .foregroundStyle(selected ? Theme.accentInk : Theme.textDim)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let detail = state.environmentDetail {
+                    if detail.portForwards.isEmpty {
+                        AWSEmptyView(environment: detail.name)
+                    } else {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("PORT-FORWARDS")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .tracking(1.1)
+                                .foregroundStyle(Theme.textDim)
+
+                            ForEach(detail.portForwards) { forward in
+                                PortForwardRow(forward: forward)
+                            }
                         }
                     }
-                    .foregroundStyle(selected ? Theme.accentInk : Theme.textMuted)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 7)
-                    .background(
-                        Capsule().fill(selected ? Theme.accent : Theme.field)
-                    )
-                    .overlay {
-                        if !selected {
-                            Capsule().stroke(Theme.stroke, lineWidth: 1)
+
+                    if !detail.localProcesses.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("LOCAL PROCESSES")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .tracking(1.1)
+                                .foregroundStyle(Theme.textDim)
+                                .padding(.top, 6)
+
+                            ForEach(detail.localProcesses) { process in
+                                LocalProcessRow(process: process)
+                            }
                         }
                     }
+                } else if state.awsEnvironment == nil {
+                    AWSEmptyView(environment: nil)
+                } else {
+                    VStack(spacing: 14) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(Theme.accent)
+                        Text("Loading AWS environment…")
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundStyle(Theme.textDim)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 80)
                 }
-                .buttonStyle(.plain)
             }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
+        .onAppear {
+            Task { await state.refreshEnvironmentDetail() }
+        }
+    }
+}
+
+private struct AWSEmptyView: View {
+    let environment: String?
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "cloud")
+                .font(.system(size: 38, weight: .light))
+                .foregroundStyle(Theme.textDim)
+
+            Text(environment == nil ? "No AWS environment" : "No AWS workloads yet")
+                .font(Theme.title(18))
+                .foregroundStyle(Theme.text)
+
+            Text(environment == nil
+                 ? "This workspace has no environment besides Docker."
+                 : "Port-forwards and Kubernetes workloads for “\(environment!)” land in the next slice.")
+                .font(.system(size: 12, design: .rounded))
+                .foregroundStyle(Theme.textMuted)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 70)
+    }
+}
+
+private struct PortForwardRow: View {
+    let forward: PortForwardInfo
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "network")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.info)
+                .frame(width: 28, height: 28)
+                .background(Theme.info.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(forward.name)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+                Text("\(forward.k8sContext) · \(forward.k8sNamespace)/\(forward.k8sService)")
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Text("\(forward.localPort) → \(forward.remotePort)")
+                .font(Theme.mono)
+                .foregroundStyle(Theme.textMuted)
+        }
+        .padding(13)
+        .cardStyle()
+    }
+}
+
+private struct LocalProcessRow: View {
+    let process: LocalProcessInfo
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "terminal")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.violet)
+                .frame(width: 28, height: 28)
+                .background(Theme.violet.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(process.name)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+                Text(process.command)
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(13)
+        .cardStyle()
     }
 }
 
@@ -272,18 +384,18 @@ private struct DockerOfflineBanner: View {
     }
 }
 
-private struct NoProfileView: View {
+private struct NoWorkspaceView: View {
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "square.stack.3d.up")
                 .font(.system(size: 38, weight: .light))
                 .foregroundStyle(Theme.textDim)
 
-            Text("No profiles yet")
+            Text("No workspace yet")
                 .font(Theme.title(18))
                 .foregroundStyle(Theme.text)
 
-            Text("Use the + button in the sidebar to create a profile.\nProfiles share the same ~/.stackr config as the CLI.")
+            Text("Use the workspace menu in the sidebar to create one.\nWorkspaces share the same ~/.stackr config as the CLI.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(Theme.textMuted)
                 .multilineTextAlignment(.center)
@@ -294,8 +406,7 @@ private struct NoProfileView: View {
     }
 }
 
-private struct EmptyEnvironmentView: View {
-    let envName: String
+private struct EmptyDockerView: View {
     let onAdd: () -> Void
 
     var body: some View {
@@ -304,11 +415,11 @@ private struct EmptyEnvironmentView: View {
                 .font(.system(size: 36, weight: .light))
                 .foregroundStyle(Theme.textDim)
 
-            Text("\(envName) is empty")
+            Text("No services yet")
                 .font(Theme.title(18))
                 .foregroundStyle(Theme.text)
 
-            Text("Add a service to this environment to start building the stack.")
+            Text("Add a service to this workspace to start building the Docker stack.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(Theme.textMuted)
 
@@ -327,8 +438,8 @@ private struct ServiceCard: View {
 
     let service: ServiceStatus
     let isBusy: Bool
+    let onOpen: () -> Void
     let onLogs: () -> Void
-    let onDelete: () -> Void
 
     @State private var hovering = false
 
@@ -352,23 +463,7 @@ private struct ServiceCard: View {
 
                 Spacer(minLength: 4)
 
-                Menu {
-                    Button("View logs", action: onLogs)
-                    Button("Copy image") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(service.fullImage, forType: .string)
-                    }
-                    Divider()
-                    Button("Delete service", role: .destructive, action: onDelete)
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.textMuted)
-                        .frame(width: 24, height: 24)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
+                ActionIconButton(systemName: "text.alignleft", tint: accent, help: "View logs", action: onLogs)
             }
 
             Text(service.fullImage)
@@ -400,11 +495,11 @@ private struct ServiceCard: View {
 
                 HStack(spacing: 6) {
                     if service.isRunning {
-                        ActionIconButton(systemName: "stop.fill", tint: Theme.danger, help: "Stop") {
-                            Task { await state.performServiceAction("stop", service: service) }
-                        }
                         ActionIconButton(systemName: "arrow.clockwise", tint: Theme.warning, help: "Restart") {
                             Task { await state.performServiceAction("restart", service: service) }
+                        }
+                        ActionIconButton(systemName: "stop.fill", tint: Theme.danger, help: "Stop") {
+                            Task { await state.performServiceAction("stop", service: service) }
                         }
                     } else {
                         ActionIconButton(systemName: "play.fill", tint: Theme.accent, help: "Start") {
@@ -412,7 +507,7 @@ private struct ServiceCard: View {
                         }
                     }
 
-                    ActionIconButton(systemName: "text.alignleft", tint: accent, help: "Logs", action: onLogs)
+                    ActionIconButton(systemName: "slider.horizontal.3", tint: Theme.textMuted, help: "Configure", action: onOpen)
                 }
                 .disabled(isBusy)
                 .opacity(isBusy ? 0.5 : 1)
@@ -422,7 +517,7 @@ private struct ServiceCard: View {
         .frame(minHeight: 168)
         .cardStyle(highlighted: hovering)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onLogs)
+        .onTapGesture(perform: onOpen)
         .onHover { value in
             withAnimation(.easeOut(duration: 0.12)) { hovering = value }
         }

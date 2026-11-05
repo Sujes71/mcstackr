@@ -94,8 +94,77 @@ struct CreateProfileRequest: Encodable {
     let environments: [String]
 }
 
-struct CreateEnvironmentRequest: Encodable {
+struct PortConfig: Codable, Hashable {
+    var host: String
+    var container: String
+}
+
+struct EnvVarConfig: Codable, Hashable {
+    var key: String
+    var value: String
+}
+
+struct ServiceConfig: Codable {
     let name: String
+    let image: String
+    let tag: String
+    let fullImage: String
+    let ports: [PortConfig]
+    let envVars: [EnvVarConfig]
+}
+
+struct UpdateServiceRequest: Encodable {
+    let image: String
+    let tag: String
+    let ports: [PortConfig]
+    let envVars: [EnvVarConfig]
+}
+
+struct EnvironmentDetail: Codable {
+    let name: String
+    let serviceCount: Int
+    let portForwards: [PortForwardInfo]
+    let localProcesses: [LocalProcessInfo]
+}
+
+struct PortForwardInfo: Codable, Identifiable, Hashable {
+    let name: String
+    let localPort: Int
+    let remotePort: Int
+    let k8sContext: String
+    let k8sNamespace: String
+    let k8sService: String
+
+    var id: String { name }
+}
+
+struct LocalProcessInfo: Codable, Identifiable, Hashable {
+    let name: String
+    let command: String
+    let workDir: String
+
+    var id: String { name }
+}
+
+enum AppSection: String, CaseIterable, Identifiable {
+    case docker
+    case aws
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .docker: return "Docker"
+        case .aws: return "AWS"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .docker: return "shippingbox.fill"
+        case .aws: return "cloud.fill"
+        }
+    }
 }
 
 struct PortMappingInput: Encodable {

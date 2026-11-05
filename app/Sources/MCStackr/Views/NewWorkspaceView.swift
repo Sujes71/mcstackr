@@ -1,12 +1,11 @@
 import SwiftUI
 
-struct NewProfileView: View {
+struct NewWorkspaceView: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
     @State private var description = ""
-    @State private var environments = "local"
     @State private var isSaving = false
     @State private var localError: String?
 
@@ -14,10 +13,10 @@ struct NewProfileView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("New profile")
+                    Text("New workspace")
                         .font(Theme.display(22))
                         .foregroundStyle(Theme.text)
-                    Text("A profile groups environments, services and operations for one product.")
+                    Text("A workspace is one project: its Docker stack and its AWS workloads.")
                         .font(.system(size: 11.5, design: .rounded))
                         .foregroundStyle(Theme.textMuted)
                 }
@@ -40,12 +39,20 @@ struct NewProfileView: View {
                 ThemedTextField(placeholder: "Optional short description", text: $description)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                FieldLabel(text: "Environments")
-                ThemedTextField(placeholder: "local, dev, staging", text: $environments)
-                Text("Comma separated. Up to 5. Defaults to local.")
-                    .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(Theme.textDim)
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.running)
+                Text("Docker and AWS sections are created automatically.")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(Theme.textMuted)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.field, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Theme.stroke, lineWidth: 1)
             }
 
             if let localError {
@@ -59,7 +66,7 @@ struct NewProfileView: View {
                 Spacer()
                 ActionTextButton(title: "Cancel") { dismiss() }
                 ActionTextButton(
-                    title: isSaving ? "Creating…" : "Create profile",
+                    title: isSaving ? "Creating…" : "Create workspace",
                     systemName: "plus",
                     prominent: true
                 ) {
@@ -76,32 +83,21 @@ struct NewProfileView: View {
 
     private func create() async {
         localError = nil
-        let envs = parsedEnvironments()
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         guard !trimmedName.isEmpty else { return }
 
         isSaving = true
         defer { isSaving = false }
 
-        let created = await state.createProfile(
+        let created = await state.createWorkspace(
             name: trimmedName,
-            description: description.trimmingCharacters(in: .whitespaces),
-            environments: envs
+            description: description.trimmingCharacters(in: .whitespaces)
         )
         if created {
             dismiss()
         } else {
-            localError = state.errorMessage ?? "Could not create the profile."
+            localError = state.errorMessage ?? "Could not create the workspace."
             state.errorMessage = nil
         }
-    }
-
-    private func parsedEnvironments() -> [String] {
-        var seen = Set<String>()
-        let parsed = environments
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-        return parsed.isEmpty ? ["local"] : parsed
     }
 }

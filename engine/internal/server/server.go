@@ -40,8 +40,12 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("GET /api/profiles", s.handleListProfiles)
 	s.mux.HandleFunc("POST /api/profiles", s.handleCreateProfile)
+	s.mux.HandleFunc("DELETE /api/profiles/{profile}", s.handleDeleteProfile)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs", s.handleCreateEnvironment)
+	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}", s.handleGetEnvironment)
 	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/status", s.handleStatus)
+	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}", s.handleGetService)
+	s.mux.HandleFunc("PATCH /api/profiles/{profile}/envs/{env}/services/{service}", s.handleUpdateService)
 	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/compose", s.handleCompose)
 	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/logs", s.handleLogs)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/actions/{action}", s.handleEnvAction)

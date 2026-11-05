@@ -646,6 +646,39 @@ func (c *Config) DeleteService(profileName, envName, svcName string) (*Profile, 
 	return nil, fmt.Errorf("profile %q not found", profileName)
 }
 
+// UpdateService replaces the editable fields of a service while preserving
+// everything the UI does not edit (volumes, sync envs, healthcheck, ...).
+func (c *Config) UpdateService(profileName, envName, svcName string, updated Service) (*Profile, error) {
+	for i := range c.Profiles {
+		if c.Profiles[i].Name != profileName {
+			continue
+		}
+		p := &c.Profiles[i]
+		for j := range p.Environments {
+			if p.Environments[j].Name != envName {
+				continue
+			}
+			env := &p.Environments[j]
+			for k := range env.Services {
+				if env.Services[k].Name != svcName {
+					continue
+				}
+				svc := &env.Services[k]
+				svc.Image = updated.Image
+				svc.Tag = updated.Tag
+				svc.Ports = updated.Ports
+				svc.EnvVars = updated.EnvVars
+				p.UpdatedAt = time.Now()
+				cp := *p
+				return &cp, c.Save()
+			}
+			return nil, fmt.Errorf("service %q not found in %s/%s", svcName, profileName, envName)
+		}
+		return nil, fmt.Errorf("environment %q not found in profile %q", envName, profileName)
+	}
+	return nil, fmt.Errorf("profile %q not found", profileName)
+}
+
 func (c *Config) DeleteLocalProcess(profileName, envName, procName string) (*Profile, error) {
 	for i := range c.Profiles {
 		if c.Profiles[i].Name != profileName {

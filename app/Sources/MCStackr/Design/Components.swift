@@ -178,6 +178,7 @@ struct ActionTextButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -200,6 +201,28 @@ struct ThemedTextField: View {
 
     var body: some View {
         TextField(placeholder, text: $text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13, weight: .medium, design: .rounded))
+            .foregroundStyle(Theme.text)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Theme.field)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(Theme.stroke, lineWidth: 1)
+            }
+    }
+}
+
+struct ThemedSecureField: View {
+    let placeholder: String
+    @Binding var text: String
+
+    var body: some View {
+        SecureField(placeholder, text: $text)
             .textFieldStyle(.plain)
             .font(.system(size: 13, weight: .medium, design: .rounded))
             .foregroundStyle(Theme.text)

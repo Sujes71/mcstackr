@@ -50,6 +50,54 @@ type serviceStatusDTO struct {
 	Ports     string `json:"ports,omitempty"`
 }
 
+type portDTO struct {
+	Host      string `json:"host"`
+	Container string `json:"container"`
+}
+
+type envVarDTO struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type serviceConfigDTO struct {
+	Name      string      `json:"name"`
+	Image     string      `json:"image"`
+	Tag       string      `json:"tag"`
+	FullImage string      `json:"fullImage"`
+	Ports     []portDTO   `json:"ports"`
+	EnvVars   []envVarDTO `json:"envVars"`
+}
+
+type portForwardDTO struct {
+	Name         string `json:"name"`
+	LocalPort    int    `json:"localPort"`
+	RemotePort   int    `json:"remotePort"`
+	K8sContext   string `json:"k8sContext"`
+	K8sNamespace string `json:"k8sNamespace"`
+	K8sService   string `json:"k8sService"`
+}
+
+type localProcessDTO struct {
+	Name    string `json:"name"`
+	Command string `json:"command"`
+	WorkDir string `json:"workDir"`
+}
+
+type environmentDetailDTO struct {
+	Name           string            `json:"name"`
+	ServiceCount   int               `json:"serviceCount"`
+	PortForwards   []portForwardDTO  `json:"portForwards"`
+	LocalProcesses []localProcessDTO `json:"localProcesses"`
+}
+
+type updateServiceRequest struct {
+	Image   string      `json:"image"`
+	Tag     string      `json:"tag"`
+	Ports   []portDTO   `json:"ports"`
+	EnvVars []envVarDTO `json:"envVars"`
+}
+
 type statusResponse struct {
 	DockerAvailable bool               `json:"dockerAvailable"`
 	Error           string             `json:"error,omitempty"`
@@ -137,6 +185,49 @@ func toProfileDTO(p config.Profile) profileDTO {
 		Description:  p.Description,
 		ActiveEnv:    p.ActiveEnv,
 		Environments: envs,
+	}
+}
+
+func toServiceConfigDTO(s config.Service) serviceConfigDTO {
+	ports := make([]portDTO, 0, len(s.Ports))
+	for _, p := range s.Ports {
+		ports = append(ports, portDTO{Host: p.Host, Container: p.Container})
+	}
+	envVars := make([]envVarDTO, 0, len(s.EnvVars))
+	for _, e := range s.EnvVars {
+		envVars = append(envVars, envVarDTO{Key: e.Key, Value: e.Value})
+	}
+	return serviceConfigDTO{
+		Name:      s.Name,
+		Image:     s.Image,
+		Tag:       s.Tag,
+		FullImage: s.FullImage(),
+		Ports:     ports,
+		EnvVars:   envVars,
+	}
+}
+
+func toEnvironmentDetailDTO(e config.Environment) environmentDetailDTO {
+	forwards := make([]portForwardDTO, 0, len(e.PortForwards))
+	for _, pf := range e.PortForwards {
+		forwards = append(forwards, portForwardDTO{
+			Name:         pf.Name,
+			LocalPort:    pf.LocalPort,
+			RemotePort:   pf.RemotePort,
+			K8sContext:   pf.K8sContext,
+			K8sNamespace: pf.K8sNamespace,
+			K8sService:   pf.K8sService,
+		})
+	}
+	processes := make([]localProcessDTO, 0, len(e.LocalProcesses))
+	for _, lp := range e.LocalProcesses {
+		processes = append(processes, localProcessDTO{Name: lp.Name, Command: lp.Command, WorkDir: lp.WorkDir})
+	}
+	return environmentDetailDTO{
+		Name:           e.Name,
+		ServiceCount:   len(e.Services),
+		PortForwards:   forwards,
+		LocalProcesses: processes,
 	}
 }
 
@@ -499,6 +590,150 @@ func (s *Server) handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toProfileDTO(updated))
+}
+
+// ── Service config ──────────────────────────────────────────────────────────
+
+func (s *Server) handleGetService(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	envName := r.PathValue("env")
+	serviceName := r.PathValue("service")
+
+	var svc config.Service
+	err := s.store.View(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return fmt.Errorf("profile %q not found", profileName)
+		}
+		idx := indexOfEnv(*p, envName)
+		if idx < 0 {
+			return fmt.Errorf("environment %q not found in profile %q", envName, profileName)
+		}
+		for _, candidate := range p.Environments[idx].Services {
+			if candidate.Name == serviceName {
+				svc = candidate
+				return nil
+			}
+		}
+		return fmt.Errorf("service %q not found", serviceName)
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toServiceConfigDTO(svc))
+}
+
+func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	envName := r.PathValue("env")
+	serviceName := r.PathValue("service")
+
+	var req updateServiceRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	image := strings.TrimSpace(req.Image)
+	if image == "" {
+		writeError(w, http.StatusBadRequest, "service image is required")
+		return
+	}
+
+	svc := config.Service{Image: image, Tag: strings.TrimSpace(req.Tag)}
+	for _, p := range req.Ports {
+		host := strings.TrimSpace(p.Host)
+		container := strings.TrimSpace(p.Container)
+		if host == "" || container == "" {
+			continue
+		}
+		svc.Ports = append(svc.Ports, config.PortMapping{Host: host, Container: container})
+	}
+	for _, e := range req.EnvVars {
+		key := strings.TrimSpace(e.Key)
+		if key == "" {
+			continue
+		}
+		svc.EnvVars = append(svc.EnvVars, config.EnvVar{Key: key, Value: e.Value})
+	}
+
+	var updated config.Profile
+	err := s.store.Update(func(c *config.Config) error {
+		p, err := c.UpdateService(profileName, envName, serviceName, svc)
+		if err != nil {
+			return err
+		}
+		updated = *p
+		_, err = config.GenerateCompose(*p, envName)
+		return err
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toProfileDTO(updated))
+}
+
+func (s *Server) handleDeleteProfile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("profile")
+
+	var profile config.Profile
+	err := s.store.View(func(c *config.Config) error {
+		p, ok := c.GetProfile(name)
+		if !ok {
+			return fmt.Errorf("profile %q not found", name)
+		}
+		profile = *p
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	// Best effort: bring containers down before the config disappears.
+	if docker.DaemonAvailable() {
+		for _, env := range profile.Environments {
+			if len(env.Services) == 0 {
+				continue
+			}
+			_ = docker.Down(name, env.Name)
+		}
+	}
+
+	if err := s.store.Update(func(c *config.Config) error {
+		return c.DeleteProfile(name)
+	}); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Environment detail ──────────────────────────────────────────────────────
+
+func (s *Server) handleGetEnvironment(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	envName := r.PathValue("env")
+
+	var env config.Environment
+	err := s.store.View(func(c *config.Config) error {
+		p, ok := c.GetProfile(profileName)
+		if !ok {
+			return fmt.Errorf("profile %q not found", profileName)
+		}
+		idx := indexOfEnv(*p, envName)
+		if idx < 0 {
+			return fmt.Errorf("environment %q not found in profile %q", envName, profileName)
+		}
+		env = p.Environments[idx]
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toEnvironmentDetailDTO(env))
 }
 
 // ── Logs (SSE) ──────────────────────────────────────────────────────────────
