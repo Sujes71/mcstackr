@@ -8,9 +8,53 @@ struct RequestOpsView: View {
     @State private var response: RequestsResponse?
     @State private var selectedEnv: String = ""
     @State private var sheetTarget: SheetTarget?
+    @State private var deleteTarget: DeleteTarget?
     @State private var errorText: String?
     /// The folders the user has opened. They all start folded.
     @State private var expanded: Set<String> = []
+
+    /// What is about to be deleted. Every delete asks first, with the same
+    /// window the rest of the app uses.
+    private enum DeleteTarget: Identifiable {
+        case request(RequestDefinition)
+        case folder(String)
+        case env(String)
+
+        var id: String {
+            switch self {
+            case .request(let request): return "request-\(request.name)"
+            case .folder(let folder): return "folder-\(folder)"
+            case .env(let env): return "env-\(env)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .request(let request): return "Delete request “\(request.name)”?"
+            case .folder(let folder): return "Delete folder “\(folder)”?"
+            case .env(let env): return "Delete environment “\(env)”?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .request(let request):
+                return "This removes \(request.name) from the collection. The folders and the environments stay."
+            case .folder(let folder):
+                return "This removes the folder and the requests that use it."
+            case .env(let env):
+                return "This removes the environment with its addresses and its variables."
+            }
+        }
+
+        var confirmTitle: String {
+            switch self {
+            case .request: return "Delete request"
+            case .folder: return "Delete folder"
+            case .env: return "Delete environment"
+            }
+        }
+    }
 
     private enum SheetTarget: Identifiable {
         case folder(folder: String?, url: String)
@@ -82,6 +126,15 @@ struct RequestOpsView: View {
             guard action == .addRequestEnv else { return }
             state.pendingSectionAction = nil
             sheetTarget = .newEnv
+        }
+        .sheet(item: $deleteTarget) { target in
+            ConfirmSheet(
+                title: target.title,
+                message: target.message,
+                confirmTitle: target.confirmTitle
+            ) {
+                Task { await performDelete(target) }
+            }
         }
         .sheet(item: $sheetTarget) { target in
             switch target {
@@ -176,14 +229,7 @@ struct RequestOpsView: View {
 
                 if let env, env.name != "local" {
                     ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Remove request environment") {
-                        Task {
-                            if let updated = await state.deleteRequestEnv(name: env.name) {
-                                response = updated
-                                selectedEnv = updated.envs.first?.name ?? ""
-                            } else {
-                                errorText = state.errorMessage
-                            }
-                        }
+                        deleteTarget = .env(env.name)
                     }
                 }
             }
@@ -258,7 +304,7 @@ struct RequestOpsView: View {
                 } label: {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Theme.textDim)
+                        .foregroundStyle(url.isEmpty ? Theme.textDim.opacity(0.4) : Theme.textDim)
                         .frame(width: 14, height: 14)
                 }
                 .buttonStyle(.plain)
@@ -273,7 +319,17 @@ struct RequestOpsView: View {
                     .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.text)
 
-                if !url.isEmpty {
+                if url.isEmpty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.danger)
+                        Text("Assign a value")
+                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Theme.danger)
+                    }
+                    .help("This folder has no value in this environment: its requests cannot run")
+                } else {
                     Text(url)
                         .font(Theme.monoSmall)
                         .foregroundStyle(Theme.textDim)
@@ -292,13 +348,7 @@ struct RequestOpsView: View {
                 }
 
                 ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete folder") {
-                    Task {
-                        if let updated = await state.deleteFolder(name: folder) {
-                            response = updated
-                        } else {
-                            errorText = state.errorMessage
-                        }
-                    }
+                    deleteTarget = .folder(folder)
                 }
             }
             .padding(.vertical, 2)
@@ -331,7 +381,13 @@ struct RequestOpsView: View {
                 HStack(spacing: 6) {
                     Text(request.name)
                         .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.text)
+                        .foregroundStyle(canRun(request) ? Theme.text : Theme.textDim)
+                    if !canRun(request) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.danger)
+                            .help("Assign a value to the folder \(request.baseUrlName) first")
+                    }
                     if request.isLogin {
                         Image(systemName: hasToken ? "lock.open" : "lock")
                             .font(.system(size: 10, weight: .semibold))
@@ -348,22 +404,18 @@ struct RequestOpsView: View {
 
             Spacer(minLength: 8)
 
-            ActionIconButton(systemName: "play.fill", tint: Theme.info, help: "Run request") {
+            ActionIconButton(systemName: "play.fill", tint: Theme.info, help: runHelp(for: request)) {
                 trigger(request)
             }
+            .disabled(!canRun(request))
+            .opacity(canRun(request) ? 1 : 0.4)
 
             ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit request") {
                 sheetTarget = .request(folder: request.baseUrlName, request: request)
             }
 
             ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete request") {
-                Task {
-                    if let updated = await state.deleteRequest(name: request.name) {
-                        response = updated
-                    } else {
-                        errorText = state.errorMessage
-                    }
-                }
+                deleteTarget = .request(request)
             }
         }
         .padding(.vertical, 2)
@@ -373,6 +425,16 @@ struct RequestOpsView: View {
     private var hasToken: Bool {
         guard let env else { return false }
         return !env.value(for: "_token").isEmpty
+    }
+
+    /// A request needs a value in its folder to be able to run.
+    private func canRun(_ request: RequestDefinition) -> Bool {
+        let url = env?.baseUrls.first { $0.name == request.baseUrlName }?.url ?? ""
+        return !url.isEmpty
+    }
+
+    private func runHelp(for request: RequestDefinition) -> String {
+        canRun(request) ? "Run request" : "Assign a value to the folder \(request.baseUrlName) first"
     }
 
     private func methodTint(_ method: String) -> Color {
@@ -398,11 +460,31 @@ struct RequestOpsView: View {
         }
     }
 
+    private func performDelete(_ target: DeleteTarget) async {
+        let updated: RequestsResponse?
+        switch target {
+        case .request(let request):
+            updated = await state.deleteRequest(name: request.name)
+        case .folder(let folder):
+            updated = await state.deleteFolder(name: folder)
+        case .env(let env):
+            updated = await state.deleteRequestEnv(name: env)
+        }
+        guard let updated else {
+            errorText = state.errorMessage ?? "Could not delete."
+            return
+        }
+        response = updated
+        if !updated.envs.contains(where: { $0.name == selectedEnv }) {
+            selectedEnv = updated.envs.first?.name ?? ""
+        }
+    }
+
     /// The variables the request uses, the ones the environment already has a
     /// value for are not asked again. The token is never asked: it comes from
     /// the login request.
     private func trigger(_ request: RequestDefinition) {
-        guard let env else { return }
+        guard let env, canRun(request) else { return }
         let missing = request.missingVariables(in: env)
         if missing.isEmpty {
             sheetTarget = .run(request)
@@ -458,17 +540,14 @@ struct BaseURLWizard: View {
         .frame(width: 520, height: 380)
         .background(Theme.background)
         .onAppear(perform: prefill)
-        .confirmationDialog(
-            "Delete folder “\(existingName ?? "")”?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
+        .sheet(isPresented: $confirmDelete) {
+            ConfirmSheet(
+                title: "Delete folder “\(existingName ?? "")”?",
+                message: "This removes the folder and the requests that use it.",
+                confirmTitle: "Delete folder"
+            ) {
                 Task { await deleteFolder() }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The requests that use it are removed too.")
         }
     }
 
@@ -649,15 +728,14 @@ struct RequestWizard: View {
         .frame(width: 700, height: 680)
         .background(Theme.background)
         .onAppear(perform: prefill)
-        .confirmationDialog(
-            "Delete request “\(existing?.name ?? "")”?",
-            isPresented: $confirmDelete,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
+        .sheet(isPresented: $confirmDelete) {
+            ConfirmSheet(
+                title: "Delete request “\(existing?.name ?? "")”?",
+                message: "This removes \(existing?.name ?? "") from the collection. The folders and the environments stay.",
+                confirmTitle: "Delete request"
+            ) {
                 Task { await deleteRequest() }
             }
-            Button("Cancel", role: .cancel) {}
         }
     }
 
