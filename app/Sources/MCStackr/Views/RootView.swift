@@ -34,10 +34,13 @@ struct RootView: View {
         .preferredColorScheme(.dark)
         .task { await state.bootstrap() }
         .overlay(alignment: .top) {
+            // Below the header of the section, so a notice is never hidden
+            // behind it.
             VStack(spacing: 8) {
                 ErrorBanner()
                 DBNoticeBanner()
             }
+            .padding(.top, 96)
         }
         .animation(.easeOut(duration: 0.2), value: state.dbNotice?.id)
     }

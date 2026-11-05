@@ -824,17 +824,48 @@ final class AppState: ObservableObject {
 
     /// Runs a request of a request environment. The values of the variables
     /// are the ones the user confirmed in the prompt.
-    func runRequest(env: String, request: String, variables: [String: String]) async -> RequestRunResult? {
-        guard let client, let profileName = selectedProfileName else { return nil }
+    /// Runs a request of a request environment. The values of the variables
+    /// are the ones the user confirmed. The error is returned instead of
+    /// being left in the global error banner: a request that fails is
+    /// reported with a notice, the same way an operation is.
+    func runRequest(env: String, request: String, variables: [String: String]) async -> (result: RequestRunResult?, error: String?) {
+        guard let client, let profileName = selectedProfileName else {
+            return (nil, "The engine is not running.")
+        }
         do {
-            return try await client.post(
+            let result: RequestRunResult = try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/requests/run",
                 body: RequestRunPayload(env: env, request: request, variables: variables)
             )
+            return (result, nil)
         } catch {
-            errorMessage = error.localizedDescription
-            return nil
+            return (nil, error.localizedDescription)
         }
+    }
+
+    /// Reports the result of a request with a notice, the same way the
+    /// operations report theirs.
+    func reportRequest(
+        _ request: RequestDefinition,
+        env: RequestEnvironment,
+        result: RequestRunResult?,
+        error: String?
+    ) {
+        let succeeded = result?.isSuccess == true
+        dbNotice = DBJobNotice(
+            id: "request-\(request.name)-\(Date().timeIntervalSince1970)",
+            service: request.baseUrlName,
+            label: request.name,
+            syncEnv: env.name,
+            succeeded: succeeded,
+            detail: succeeded ? (result?.body ?? "") : (error ?? "The request failed."),
+            finishedAt: isoNow()
+        )
+    }
+
+    /// The current time in the format the engine uses.
+    func isoNow() -> String {
+        ISO8601DateFormatter().string(from: Date())
     }
 
     // MARK: - DB operations

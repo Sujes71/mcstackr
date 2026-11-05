@@ -23,7 +23,7 @@ struct RequestOpsView: View {
             switch self {
             case .request(let request): return "request-\(request.name)"
             case .folder(let folder): return "folder-\(folder)"
-            case .env(let env): return "env-\(env)"
+            case .env: return "env"
             }
         }
 
@@ -39,9 +39,9 @@ struct RequestOpsView: View {
             switch self {
             case .request(let request):
                 return "This removes \(request.name) from the collection. The folders and the environments stay."
-            case .folder(let folder):
+            case .folder:
                 return "This removes the folder and the requests that use it."
-            case .env(let env):
+            case .env:
                 return "This removes the environment with its addresses and its variables."
             }
         }
@@ -58,7 +58,6 @@ struct RequestOpsView: View {
     private enum SheetTarget: Identifiable {
         case folder(folder: String?, url: String)
         case request(folder: String, request: RequestDefinition?)
-        case params(request: RequestDefinition, names: [String])
         case run(RequestDefinition)
         case newEnv
 
@@ -66,7 +65,6 @@ struct RequestOpsView: View {
             switch self {
             case .folder(let folder, _): return "folder-\(folder ?? "__new")"
             case .request(let folder, let request): return "request-\(folder)-\(request?.name ?? "__new")"
-            case .params(let request, _): return "params-\(request.name)"
             case .run(let request): return "run-\(request.name)"
             case .newEnv: return "newEnv"
             }
@@ -171,14 +169,6 @@ struct RequestOpsView: View {
                     onDeleted: { updated in response = updated }
                 )
                 .environmentObject(state)
-            case .params(let request, let names):
-                if let env {
-                    RequestVarsSheet(request: request, env: env, names: names) { values in
-                        sheetTarget = .run(request)
-                        Task { await run(request, env: env, values: values) }
-                    }
-                    .environmentObject(state)
-                }
             case .run(let request):
                 if let env {
                     RequestRunSheet(request: request, env: env)
@@ -474,10 +464,10 @@ struct RequestOpsView: View {
         return !env.value(for: "_token").isEmpty
     }
 
-    /// A request needs a value in its folder to be able to run.
+    /// The play of the row opens the window of the request, where the
+    /// variables are filled in. It only needs the folder to have a value.
     private func canRun(_ request: RequestDefinition) -> Bool {
-        let url = env?.baseUrls.first { $0.name == request.baseUrlName }?.url ?? ""
-        return !url.isEmpty
+        !folderURL(for: request).isEmpty
     }
 
     private func runHelp(for request: RequestDefinition) -> String {
@@ -527,14 +517,8 @@ struct RequestOpsView: View {
     /// request references and the ones the address of its folder references.
     /// The token is never asked: it comes from the login request.
     private func trigger(_ request: RequestDefinition) {
-        guard let env, canRun(request) else { return }
-        let names = request.runVariables(folderURL: folderURL(for: request))
-        if names.isEmpty {
-            sheetTarget = .run(request)
-            Task { await run(request, env: env, values: [:]) }
-        } else {
-            sheetTarget = .params(request: request, names: names)
-        }
+        guard canRun(request) else { return }
+        sheetTarget = .run(request)
     }
 
     /// The address of the folder a request belongs to, in this environment.
@@ -544,9 +528,10 @@ struct RequestOpsView: View {
 
     private func run(_ request: RequestDefinition, env: RequestEnvironment, values: [String: String]) async {
         errorText = nil
-        guard await state.runRequest(env: env.name, request: request.name, variables: values) != nil else {
-            errorText = state.errorMessage ?? "Could not run the request."
-            return
+        let (outcome, failure) = await state.runRequest(env: env.name, request: request.name, variables: values)
+        state.reportRequest(request, env: env, result: outcome, error: failure)
+        if outcome == nil {
+            errorText = failure ?? "Could not run the request."
         }
         await reload()
     }
@@ -1114,89 +1099,6 @@ struct RequestEnvWizard: View {
     }
 }
 
-// MARK: - Variables prompt
-
-struct RequestVarsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let request: RequestDefinition
-    let env: RequestEnvironment
-    let names: [String]
-    let onRun: ([String: String]) -> Void
-
-    @State private var values: [String: String] = [:]
-    @State private var loaded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(request.name)
-                        .font(Theme.display(22))
-                        .foregroundStyle(Theme.text)
-                    Text("These values are used for this run and saved in the environment.")
-                        .font(.system(size: 11.5, design: .rounded))
-                        .foregroundStyle(Theme.textMuted)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                ActionIconButton(systemName: "xmark", tint: Theme.danger, help: "Close") {
-                    dismiss()
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
-
-            Divider().overlay(Theme.stroke)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    ForEach(names, id: \.self) { name in
-                        VStack(alignment: .leading, spacing: 6) {
-                            FieldLabel(text: name)
-                            ThemedTextField(placeholder: name, text: binding(for: name))
-                        }
-                    }
-                }
-                .padding(22)
-            }
-            .scrollIndicators(.hidden)
-
-            Divider().overlay(Theme.stroke)
-
-            HStack(spacing: 10) {
-                Spacer()
-                ActionTextButton(title: "Cancel", systemName: nil) { dismiss() }
-                ActionTextButton(title: "Run", systemName: "play.fill", prominent: true) {
-                    onRun(values.mapValues { $0.trimmingCharacters(in: .whitespaces) })
-                    dismiss()
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 14)
-        }
-        .frame(width: 480, height: 420)
-        .background(Theme.background)
-        .onAppear(perform: prefill)
-    }
-
-    private func prefill() {
-        guard !loaded else { return }
-        loaded = true
-        for name in names {
-            values[name] = env.value(for: name)
-        }
-    }
-
-    private func binding(for name: String) -> Binding<String> {
-        Binding(
-            get: { values[name] ?? "" },
-            set: { values[name] = $0 }
-        )
-    }
-}
-
 // MARK: - Run sheet
 
 struct RequestRunSheet: View {
@@ -1212,17 +1114,14 @@ struct RequestRunSheet: View {
     @State private var localError: String?
     @State private var loaded = false
 
-    /// The variables the request uses: the ones it declares plus the ones its
-    /// text references. The token is never one of them.
+    /// The variables the request uses: the ones of the request and the ones
+    /// of the address of its folder. The token is never one of them.
     private var variableNames: [String] {
-        var names: [String] = []
-        for name in request.variableRefs where !names.contains(name) {
-            names.append(name)
-        }
-        for name in request.placeholders where !names.contains(name) {
-            names.append(name)
-        }
-        return names
+        request.runVariables(folderURL: folderURL)
+    }
+
+    private var folderURL: String {
+        env.baseUrls.first { $0.name == request.baseUrlName }?.url ?? ""
     }
 
     private var tokenValue: String {
@@ -1405,8 +1304,8 @@ struct RequestRunSheet: View {
             ActionTextButton(title: isRunning ? "Running…" : "Run", systemName: "play.fill", prominent: true) {
                 run()
             }
-            .disabled(isRunning)
-            .opacity(isRunning ? 0.5 : 1)
+            .disabled(isRunning || !canRunNow)
+            .opacity(isRunning || !canRunNow ? 0.5 : 1)
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
@@ -1420,18 +1319,29 @@ struct RequestRunSheet: View {
         }
     }
 
+    /// The run of the window only unlocks when every variable has a value.
+    private var canRunNow: Bool {
+        variableNames.allSatisfy {
+            !(values[$0] ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        }
+    }
+
     private func run() {
         localError = nil
         isRunning = true
         Task {
-            result = await state.runRequest(
+            let (outcome, failure) = await state.runRequest(
                 env: env.name,
                 request: request.name,
                 variables: values
             )
-            if result == nil {
-                localError = state.errorMessage ?? "Could not run the request."
+            result = outcome
+            if outcome == nil {
+                localError = failure ?? "Could not run the request."
             }
+            // The result is also reported with a notice, the same way the
+            // operations report theirs.
+            state.reportRequest(request, env: env, result: outcome, error: failure)
             isRunning = false
         }
     }

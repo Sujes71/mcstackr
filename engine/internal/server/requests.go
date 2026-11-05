@@ -345,7 +345,9 @@ func runRequestDef(def config.RequestDef, baseURL string, vars map[string]string
 		httpReq.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	// A request can take its time: the timeout of the console was short,
+	// but here it only made the app give up on a slow call.
+	client := &http.Client{Timeout: 120 * time.Second}
 	started := time.Now()
 	resp, err := client.Do(httpReq)
 	if err != nil {
