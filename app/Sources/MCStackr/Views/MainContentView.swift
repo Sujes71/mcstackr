@@ -111,6 +111,8 @@ struct MainContentView: View {
                 onEdit: { editingForward = $0 },
                 onDelete: { deleteTarget = .forward($0) }
             )
+        } else if state.section == .requests {
+            RequestOpsView()
         } else {
             dockerContent
         }
@@ -327,6 +329,12 @@ private struct HeaderView: View {
                 return "\(description) · \(forwards) port-forwards · \(running) running"
             }
             return "\(forwards) port-forwards · \(running) running"
+        case .requests:
+            var parts = ["request collections"]
+            if let description = profile.description, !description.isEmpty {
+                parts.insert(description, at: 0)
+            }
+            return parts.joined(separator: " · ")
         }
     }
 }

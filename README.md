@@ -80,6 +80,8 @@ All routes require `Authorization: Bearer <token>`.
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
+| GET | `/api/profiles/{p}/requests` | request environments, folders and requests |
+| POST | `/api/profiles/{p}/requests/run` | run a request (`env`, `request`, `variables`) |
 | GET | `/api/profiles/{p}/envs/{e}/services/{s}/dbops` | sync environments, actions and dumps for a DB service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/dbops/{export-schema,export-data,import-schema,import-data,truncate}` | start a DB operation job |
 | GET | `/api/profiles/{p}/envs/{e}/services/{s}/dbops/jobs/{id}` | DB operation job state |
@@ -121,5 +123,5 @@ operations (sync-environment wizard, schema/data export and import, truncate)
 as background jobs (tool images pulled on demand), shared config, engine
 lifecycle.
 
-Next slices: Kubernetes resource manager (deployments), queues, MockServer,
-request collections, git operations.
+Next slices: editing the request collections, Kubernetes resource manager
+(deployments), queues, MockServer, git operations.

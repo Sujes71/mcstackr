@@ -154,6 +154,7 @@ struct SidebarView: View {
                 .portForward,
                 badge: state.runningForwardCount > 0 ? "\(state.runningForwardCount)" : nil
             )
+            sectionRow(.requests, badge: nil)
         }
     }
 

@@ -692,6 +692,33 @@ final class AppState: ObservableObject {
         return success
     }
 
+    // MARK: - Request operations
+
+    func fetchRequests() async -> RequestsResponse? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.get("/api/profiles/\(profileName.pathComponentEncoded)/requests")
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Runs a request of a request environment. The values of the variables
+    /// are the ones the user confirmed in the prompt.
+    func runRequest(env: String, request: String, variables: [String: String]) async -> RequestRunResult? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/requests/run",
+                body: RequestRunPayload(env: env, request: request, variables: variables)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     // MARK: - DB operations
 
     func fetchDBOps(service: String) async -> DBOpsInfo? {

@@ -345,6 +345,7 @@ struct SyncEnvDraft: Encodable {
 enum AppSection: String, CaseIterable, Identifiable {
     case docker
     case portForward
+    case requests
 
     var id: String { rawValue }
 
@@ -352,6 +353,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .docker: return "Docker"
         case .portForward: return "Port Forwards"
+        case .requests: return "Requests"
         }
     }
 
@@ -359,6 +361,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .docker: return "shippingbox.fill"
         case .portForward: return "arrow.left.arrow.right"
+        case .requests: return "list.bullet.rectangle"
         }
     }
 }
@@ -380,4 +383,77 @@ struct CreateServiceRequest: Encodable {
 
 struct APIErrorBody: Codable {
     let error: String
+}
+
+
+// MARK: - Request operations
+
+struct RequestBaseURL: Codable, Identifiable, Hashable {
+    let name: String
+    let url: String
+
+    var id: String { name }
+}
+
+struct RequestVariable: Codable, Identifiable, Hashable {
+    let name: String
+    var value: String
+
+    var id: String { name }
+}
+
+/// A request environment: its own base URLs and variables.
+struct RequestEnvironment: Codable, Identifiable, Hashable {
+    let name: String
+    let baseUrls: [RequestBaseURL]
+    var variables: [RequestVariable]
+
+    var id: String { name }
+
+    func value(for name: String) -> String {
+        variables.first { $0.name == name }?.value ?? ""
+    }
+}
+
+struct RequestKV: Codable, Hashable {
+    let key: String
+    let value: String
+}
+
+struct RequestDefinition: Codable, Identifiable, Hashable {
+    let name: String
+    let method: String
+    let baseUrlName: String
+    let path: String
+    let isLogin: Bool
+    let tokenPath: String
+    let headers: [RequestKV]
+    let params: [RequestKV]
+    let body: String
+    let variableRefs: [String]
+
+    var id: String { name }
+}
+
+struct RequestsResponse: Codable {
+    let envs: [RequestEnvironment]
+    let folders: [String]
+    let requests: [RequestDefinition]
+}
+
+struct RequestRunPayload: Encodable {
+    let env: String
+    let request: String
+    let variables: [String: String]
+}
+
+struct RequestRunResult: Codable {
+    let status: Int
+    let statusText: String
+    let body: String
+    let durationMs: Int
+    let token: String?
+    let url: String
+
+    var isSuccess: Bool { (200..<300).contains(status) }
 }
