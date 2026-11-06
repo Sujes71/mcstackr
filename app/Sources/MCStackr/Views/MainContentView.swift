@@ -1,6 +1,45 @@
 import AppKit
 import SwiftUI
 
+    /// Every delete in the app confirms through the same window.
+    private enum DeleteTarget: Identifiable {
+        case service(ServiceStatus)
+        case process(LocalProcessInfo)
+        case forward(PortForwardInfo)
+        case k8sEnvironment(String)
+
+        var id: String {
+            switch self {
+            case .service(let service): return "service-\(service.name)"
+            case .process(let process): return "process-\(process.name)"
+            case .forward(let forward): return "forward-\(forward.name)"
+            case .k8sEnvironment(let name): return "k8s-environment-\(name)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .service(let service): return "Delete service “\(service.name)”?"
+            case .process(let process): return "Delete local process “\(process.name)”?"
+            case .forward(let forward): return "Delete port-forward “\(forward.name)”?"
+            case .k8sEnvironment(let name): return "Delete environment “\(name)”?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .service(let service):
+                return "This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost."
+            case .process(let process):
+                return "This stops \(process.name) and removes it from the workspace."
+            case .forward(let forward):
+                return "This stops the forward and removes it from the workspace."
+            case .k8sEnvironment:
+                return "The environment and the port forwards it holds are removed. The workspace keeps the rest."
+            }
+        }
+    }
+
 struct MainContentView: View {
     @EnvironmentObject private var state: AppState
 
@@ -16,46 +55,13 @@ struct MainContentView: View {
     @State private var editingForward: PortForwardInfo?
     @State private var k8sManagerTarget: K8sManagerTarget?
 
-    /// Every delete in the app confirms through the same window.
-    private enum DeleteTarget: Identifiable {
-        case service(ServiceStatus)
-        case process(LocalProcessInfo)
-        case forward(PortForwardInfo)
-
-        var id: String {
-            switch self {
-            case .service(let service): return "service-\(service.name)"
-            case .process(let process): return "process-\(process.name)"
-            case .forward(let forward): return "forward-\(forward.name)"
-            }
-        }
-
-        var title: String {
-            switch self {
-            case .service(let service): return "Delete service “\(service.name)”?"
-            case .process(let process): return "Delete local process “\(process.name)”?"
-            case .forward(let forward): return "Delete port-forward “\(forward.name)”?"
-            }
-        }
-
-        var message: String {
-            switch self {
-            case .service(let service):
-                return "This removes \(service.name) from the workspace, deletes its container and its named volumes. Stored data is lost."
-            case .process(let process):
-                return "This stops \(process.name) and removes it from the workspace."
-            case .forward(let forward):
-                return "This stops the forward and removes it from the workspace."
-            }
-        }
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             HeaderView(
                 showAddService: $showAddService,
                 showAddK8sEnv: $showAddK8sEnv,
-                k8sManagerTarget: $k8sManagerTarget
+                k8sManagerTarget: $k8sManagerTarget,
+                deleteTarget: $deleteTarget
             )
             Divider().overlay(Theme.stroke)
             content
@@ -137,6 +143,8 @@ struct MainContentView: View {
             await state.deleteLocalProcess(named: process.name)
         case .forward(let forward):
             await state.deletePortForward(named: forward.name)
+        case .k8sEnvironment(let name):
+            await state.deleteK8sEnvironment(name: name)
         }
         deleteTarget = nil
     }
@@ -257,6 +265,7 @@ private struct HeaderView: View {
     @Binding var showAddService: Bool
     @Binding var showAddK8sEnv: Bool
     @Binding var k8sManagerTarget: K8sManagerTarget?
+    @Binding var deleteTarget: DeleteTarget?
 
     private var isDocker: Bool { state.section == .docker }
 
@@ -386,6 +395,19 @@ private struct HeaderView: View {
 
             ActionIconButton(systemName: "square.stack.3d.down.forward", tint: Theme.info, help: "Manage the Kubernetes deployments") {
                 k8sManagerTarget = K8sManagerTarget(context: nil, namespace: nil, deployment: nil)
+            }
+
+            // Removing the environment in use belongs to the header, next to
+            // the button that adds one, the same way the request environments
+            // do it.
+            if let environment = state.portForwardEnvironment {
+                ActionIconButton(
+                    systemName: "trash",
+                    tint: Theme.danger,
+                    help: "Remove the \(environment.name) environment"
+                ) {
+                    deleteTarget = .k8sEnvironment(environment.name)
+                }
             }
 
             // The header creates the environment; the port forwards are

@@ -17,8 +17,12 @@ struct SidebarView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 18)
 
-            nav
-                .padding(.horizontal, 12)
+            // The sections belong to a workspace: without one there is
+            // nothing to navigate to.
+            if state.selectedProfile != nil {
+                nav
+                    .padding(.horizontal, 12)
+            }
 
             if state.profiles.isEmpty {
                 emptyWorkspace

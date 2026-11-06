@@ -301,10 +301,12 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   inside it. The environments of the workspace that are not the docker one
   are the Kubernetes ones, and the section moves between them the way the
   Request section moves between its request environments. A new workspace has
-  no Kubernetes environment at all until the user creates one, and none of
-  them is in use until the user picks one: the app does not choose for him.
-  Every environment can be removed, with the window the app uses for every
-  destructive action, and the port forwards it holds go with it.
+  no Kubernetes environment at all until the user creates one, and the
+  section shows the first one that exists: the empty state of the section is
+  only for a workspace that has none. Every environment can be removed, with
+  the window the app uses for every destructive action, and the port forwards
+  it holds go with it. The button that removes it lives in the header, next
+  to the button that adds one, the same way the request environments do it.
 - **S75** — The logs of a deployment are live and well formatted: they
   arrive while the window is open, every line is a row of its own with its
   timestamp and its level coloured, and the scroll follows the stream
@@ -314,8 +316,11 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   use the format of the log.
 - **S76** — The sections are named Docker, Kubernetes, Request and Git.
 - **S77** — The button of a port forward opens the manager of the
-  deployments of its namespace, on the deployment of the forward itself: it
-  does not ask for the context, the namespace or the deployment.
+  deployments of its namespace, on the actions of the deployment of the
+  forward itself: it does not ask for the context, the namespace or the
+  deployment, and the list of the namespace is never in between.
+- **S78** — Without a workspace the sidebar shows no section: there is
+  nothing to navigate to.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -475,6 +480,22 @@ MockServer, request collections, git operations.
   1/1"); the removal asks first with "Remove \u{201C}dev\u{201D}?" and, once
   confirmed, the config keeps only the docker environment and the section
   goes back to "No Kubernetes environment".
+- [x] T83 — The corrections of the last review: the manager opens from a
+  port forward on the actions of the deployment of the forward, the sidebar
+  shows no section without a workspace, the button that removes a Kubernetes
+  environment lives in the header next to the button that adds one, and the
+  empty state of the section is only for a workspace that has no environment
+  at all: with one, the section always shows the first, and after removing
+  one the first that is left takes its place. Evidence: driven in the app
+  over the accessibility tree with a config of its own, the section opens
+  with "dev" when the workspace has "dev" and "staging", and with "No
+  Kubernetes environment" when it has only the docker one; the header shows
+  "Remove the dev environment" next to "Add environment" and the window of
+  the app asks "Delete environment \u{201C}dev\u{201D}?"; once confirmed the
+  section shows "staging"; the button of the row opens the manager already
+  in "ACTIONS | Name | batch | Namespace | d4i" without the list of the
+  namespace in between; without a workspace the sidebar has no section
+  button at all.
 - [x] T82 — Every output of the app is drawn with the format of the log: the
   notice of the last operation, the output of a DB, queue and mock
   operation, and the last error of a port-forward. The shared block carries
@@ -839,6 +860,28 @@ MockServer, request collections, git operations.
 - **L89 (request, verbatim):** "tambien los logs de los docker y no se si
   hay mas logs no estan igual de formateados que todo los logs de la app git
   etc.. tengan el mismo formateo de logs"
+- **L91 (request, verbatim):** "pero no me lleves al select deployment cuando
+  el doy desde el forward llevame a la ventana de select and actio
+  directamente... ademas respecto a por ejemplo cuando a no hay workspaces yet
+  me parece bien lo que baces pero que no aparezcan las opciones tmpoco de
+  kubernetes, docekr etc.. eso solo cuando creas el workspace sino full
+  vacio. ademas no estan alineados en request para eliminar un env esta
+  arriba en en kubernetes al lado, sigue el estandar de arriba, ademas al
+  eliminar un env habiendo otro me lleva a un environment inexistente de uqe
+  no hay environments cuando si que quedaa el otro lo que debes hacer es
+  llevarme al primer environment si hay cuando borro el anterior."
+- **L92 (request, verbatim):** "bro la ventana de no environments in use solo
+  debe aparecer cuando de verdad no hay creado ningun environment sino debe
+  aparecer siempre el primero mamon"
+- **L93 (decision):** the manager opens from a port forward on the ACTIONS of
+  the deployment of the forward, never on the list of the namespace; the
+  numbers of the deployment arrive with the list, so the window is useful
+  even when the cluster answers late. The sidebar shows no section without a
+  workspace. The button that removes a Kubernetes environment lives in the
+  header, next to the button that adds one, the same way the request
+  environments do it. The empty state of the section is only for a workspace
+  that has no environment at all: when there is one, the section always shows
+  the first, and after removing one the first that is left takes its place.
 - **L90 (decision):** every environment of Kubernetes can be removed, with
   the window the app uses for every destructive action, and none of them is
   in use until the user picks one: the app does not choose an environment

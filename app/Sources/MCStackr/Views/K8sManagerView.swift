@@ -113,8 +113,6 @@ struct K8sManagerView: View {
     @State private var feedback: Feedback?
     @State private var replicaText = ""
     @State private var liveLogs: K8sLogsTarget?
-    /// The deployment the manager was opened with is already on screen.
-    @State private var openedInitialDeployment = false
     @State private var confirmDelete = false
 
     // MARK: Init
@@ -129,9 +127,27 @@ struct K8sManagerView: View {
         let context = self.initialContext ?? ""
         let namespace = self.initialNamespace ?? ""
         let opensAtDeployments = !context.isEmpty && !namespace.isEmpty
-        _step = State(initialValue: opensAtDeployments ? .deployments : .context)
         _selectedContext = State(initialValue: context)
         _selectedNamespace = State(initialValue: namespace)
+
+        // It comes from a port forward: the manager opens on the actions of
+        // that deployment, without the list of the namespace in between. The
+        // numbers of the deployment arrive with the list.
+        if let deployment = self.initialDeployment, !deployment.isEmpty {
+            _step = State(initialValue: .actions)
+            _selectedDeployment = State(initialValue: K8sDeployment(
+                name: deployment,
+                desired: 0,
+                available: 0,
+                updated: 0,
+                progressing: false,
+                lastRestarted: "",
+                age: "",
+                strategy: ""
+            ))
+        } else {
+            _step = State(initialValue: opensAtDeployments ? .deployments : .context)
+        }
     }
 
     // MARK: Body
@@ -808,17 +824,17 @@ struct K8sManagerView: View {
         openInitialDeploymentIfAny(loaded ?? [])
     }
 
-    /// Opens the deployment the manager came for, when it is in the list.
+    /// Fills the numbers of the deployment the manager came for.
     ///
-    /// It happens once: the poll of the list must not take the user back to
-    /// the deployment every three seconds.
+    /// The manager opened on its actions without waiting for the list, so
+    /// the numbers arrive with it. It only fills the one that is on screen:
+    /// the user may have picked another deployment meanwhile.
     private func openInitialDeploymentIfAny(_ loaded: [K8sDeployment]) {
-        guard !openedInitialDeployment,
-              let wanted = initialDeployment,
+        guard let wanted = initialDeployment,
               !wanted.isEmpty,
+              selectedDeployment?.name == wanted,
               let match = loaded.first(where: { $0.name == wanted }) else { return }
-        openedInitialDeployment = true
-        selectDeployment(match)
+        selectedDeployment = match
     }
 }
 

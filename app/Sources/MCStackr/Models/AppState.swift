@@ -121,12 +121,17 @@ final class AppState: ObservableObject {
         return profile.environments.filter { $0.name != "local" }
     }
 
-    /// The Kubernetes environment in use: the one the user picked.
+    /// The Kubernetes environment in use: the one the user picked, or the
+    /// first one when there is none picked yet.
     ///
-    /// There is none until the user picks one: the app does not choose an
-    /// environment for him, and a new workspace has none at all.
+    /// There is always one when the workspace has any: the section never
+    /// shows an empty state while there are environments to show.
     var portForwardEnvironment: ProfileEnvironment? {
-        k8sEnvironments.first(where: { $0.name == selectedK8sEnvName })
+        let environments = k8sEnvironments
+        if let picked = environments.first(where: { $0.name == selectedK8sEnvName }) {
+            return picked
+        }
+        return environments.first
     }
 
     var portForwardCount: Int { environmentDetail?.portForwards.count ?? portForwardEnvironment?.portForwardCount ?? 0 }
@@ -243,6 +248,10 @@ final class AppState: ObservableObject {
     }
 
     /// Removes a Kubernetes environment, with the port forwards it holds.
+    ///
+    /// When the one in use goes away, the first one that is left takes its
+    /// place: the user is not left pointing at an environment that does not
+    /// exist any more.
     func deleteK8sEnvironment(name: String) async -> Bool {
         guard let client, let profileName = selectedProfileName else { return false }
         do {
@@ -254,6 +263,9 @@ final class AppState: ObservableObject {
                 environmentDetail = nil
             }
             try await reloadProfiles()
+            if selectedK8sEnvName.isEmpty {
+                selectedK8sEnvName = k8sEnvironments.first?.name ?? ""
+            }
             await refreshEnvironmentDetail()
             return true
         } catch {
@@ -262,8 +274,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Keeps the picked Kubernetes environment when it still exists. It does
-    /// not pick one when there is none: the user chooses.
+    /// Keeps the picked Kubernetes environment when it still exists.
     private func reconcileK8sEnvironment(_ profile: Profile) {
         let environments = profile.environments.filter { $0.name != "local" }
         if !environments.contains(where: { $0.name == selectedK8sEnvName }) {
