@@ -307,12 +307,6 @@ struct MockParamsSheet: View {
     @State private var values: [String: String] = [:]
     @State private var loaded = false
 
-    /// The body is written in the same field as the rest.
-    private var isBody: Bool { action.id == "import-expectation" }
-
-    /// The method is chosen, not written.
-    private var isMethod: Bool { action.params?.contains("method") == true }
-
     /// The methods of the original runtime.
     private let methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 
@@ -350,7 +344,7 @@ struct MockParamsSheet: View {
                     ForEach(action.params ?? [], id: \.self) { name in
                         VStack(alignment: .leading, spacing: 6) {
                             FieldLabel(text: name)
-                            if isMethod {
+                            if name == "method" {
                                 Picker("Method", selection: binding(for: name)) {
                                     ForEach(methods, id: \.self) { method in
                                         Text(method).tag(method)
@@ -358,7 +352,7 @@ struct MockParamsSheet: View {
                                 }
                                 .pickerStyle(.segmented)
                                 .labelsHidden()
-                            } else if isBody {
+                            } else if name == "body" {
                                 // The body of an expectation can be long.
                                 TextEditor(text: binding(for: name))
                                     .font(.system(size: 12, design: .monospaced))
