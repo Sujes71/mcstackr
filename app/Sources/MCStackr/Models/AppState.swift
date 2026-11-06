@@ -22,6 +22,9 @@ final class AppState: ObservableObject {
     @Published private(set) var engineVersion = ""
     @Published private(set) var configPath = ""
     @Published private(set) var environmentDetail: EnvironmentDetail?
+    /// The state of the repository. It lives here so the refresh of the header
+    /// reloads it, the same way it reloads the rest.
+    @Published private(set) var gitState: GitState?
     @Published private(set) var dockerDetail: EnvironmentDetail?
     @Published private(set) var catalog: [CatalogEntry] = []
 
@@ -215,7 +218,17 @@ final class AppState: ObservableObject {
         await refreshStatus()
         await refreshDockerDetail()
         await refreshEnvironmentDetail()
+        await refreshGit()
         refreshToken += 1
+    }
+
+    /// Reloads the state of the repository. A failure here is not an error of
+    /// the app: the section simply has nothing to show.
+    func refreshGit() async {
+        guard let client, let profileName = selectedProfileName else { return }
+        gitState = try? await client.get(
+            "/api/profiles/\(profileName.pathComponentEncoded)/gitops"
+        )
     }
 
     func refreshHealth() async {

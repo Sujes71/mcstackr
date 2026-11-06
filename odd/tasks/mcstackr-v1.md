@@ -259,6 +259,13 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   branch. The merge and delete confirmations live in the branch sheet that
   opened them, and the detail of a commit lives in the log sheet that opened
   it, because a view cannot present two sheets at the same time.
+- **S68** — The windows of the git section follow the standard of the rest of
+  the app: the title and the subtitle in the header, one cross at the top
+  right to close, and no button at the bottom that only closes the window. A
+  footer button is there only when it does something: commit, amend, create
+  branch, continue the merge. The refresh is the one of the header, the same
+  that reloads the rest of the app, and it also reloads the state of the
+  repository, so a change made outside the app shows up.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -530,3 +537,24 @@ MockServer, request collections, git operations.
   same attributed string to an image and reading the pixels: the added lines
   are green, the removed ones red, the hunks cyan and the file headers grey.
   The colour of a diff in a single flat tone is not acceptable.
+
+- **L63 (request):** "por lo rponto ya vi una cagada, en el de branches un boton
+  close abajo a la derecha cuando ese no es el estandar... tambien el refresh
+  que pusite abajko para que si ya tenemos el de arriba? para eso haz que el de
+  arrbia haga lo mismo que el de abajo. entiendo que lo que hace es refrescar
+  por si se ha hecho algun cambio fuera."
+- **L64 (request):** "no solo en branches een todas la svetnanas puse el puto
+  cancel abajo.."
+- **L65 (request):** "ealina las ventanas con el resto de la app"
+- **L66 (decision):** the bottom close and cancel buttons are gone from every
+  git window, the commit, branches, log and conflicts ones, and the window is
+  closed with the cross of the header like everywhere else in the app. The
+  refresh of the footer is gone as well: the one of the header now reloads the
+  repository too, so a change made outside the app shows up with the same
+  button that reloads the rest. The state of the repository moved to the app
+  state for that to be possible.
+- **L67 (evidence):** the branch window now shows only the new branch button at
+  the bottom, the log window only the cross, and the amend window the cross and
+  the amend button. The refresh of the header was pressed with a change made
+  outside the app and the new file appeared. The new branch form was filled
+  and the branch was created.

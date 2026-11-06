@@ -7,7 +7,6 @@ import SwiftUI
 struct GitOpsView: View {
     @EnvironmentObject private var state: AppState
 
-    @State private var git: GitState?
     @State private var selectedPath: String?
     @State private var diffText: String = ""
     @State private var loadingDiff: Bool = false
@@ -22,7 +21,6 @@ struct GitOpsView: View {
         case branches
         case log
         case conflicts
-        case newBranch
 
         var id: String {
             switch self {
@@ -30,7 +28,6 @@ struct GitOpsView: View {
             case .branches: return "branches"
             case .log: return "log"
             case .conflicts: return "conflicts"
-            case .newBranch: return "newBranch"
             }
         }
     }
@@ -126,10 +123,6 @@ struct GitOpsView: View {
                 ) { action, path in
                     await conflictAction(action, path)
                 }
-            case .newBranch:
-                GitNewBranchSheet { name in
-                    await perform("create_branch", ["name": name])
-                }
             }
         }
         .sheet(item: $confirm) { target in
@@ -149,6 +142,8 @@ struct GitOpsView: View {
     }
 
     // MARK: - Header
+
+    private var git: GitState? { state.gitState }
 
     private var header: some View {
         HStack(spacing: 8) {
@@ -456,10 +451,6 @@ struct GitOpsView: View {
                     .controlSize(.small)
                     .tint(Theme.accent)
             }
-
-            ActionIconButton(systemName: "arrow.clockwise", tint: Theme.textMuted, help: "Refresh") {
-                Task { await reload() }
-            }
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 14)
@@ -482,9 +473,9 @@ struct GitOpsView: View {
     // MARK: - Actions
 
     private func reload() async {
-        guard let next = await state.fetchGitState() else { return }
         let previous = selectedPath
-        git = next
+        await state.refreshGit()
+        guard let next = state.gitState else { return }
         if let previous, next.files.contains(where: { $0.path == previous }) {
             await loadDiff(for: previous)
         } else {
@@ -532,6 +523,8 @@ struct GitOpsView: View {
             await perform("merge", ["source": branch.name])
         case "delete":
             await perform("delete_branch", ["name": branch.name])
+        case "create":
+            await perform("create_branch", ["name": branch.name])
         default:
             break
         }
@@ -607,7 +600,6 @@ struct GitCommitSheet: View {
 
             HStack {
                 Spacer()
-                ActionTextButton(title: "Cancel", systemName: "xmark") { dismiss() }
                 ActionTextButton(
                     title: amend ? "Amend" : "Commit",
                     systemName: "checkmark",
@@ -646,6 +638,9 @@ struct GitBranchesSheet: View {
     @State private var selected: String = ""
     /// The confirmation lives here: a view cannot present two sheets at once.
     @State private var confirm: BranchConfirm?
+    /// The new branch form, in line: the sheet cannot open another one.
+    @State private var creating = false
+    @State private var newName = ""
 
     private enum BranchConfirm: Identifiable {
         case merge(GitBranch)
@@ -703,23 +698,52 @@ struct GitBranchesSheet: View {
 
             Divider().overlay(Theme.stroke)
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(branches) { branch in
-                        branchRow(branch)
-                    }
+            if creating {
+                VStack(alignment: .leading, spacing: 8) {
+                    FieldLabel(text: "Name")
+                    ThemedTextField(placeholder: "feature/my-work", text: $newName)
+                    Text("The branch starts at the current commit.")
+                        .font(.system(size: 10.5, design: .rounded))
+                        .foregroundStyle(Theme.textDim)
                 }
-                .padding(.vertical, 6)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 1) {
+                        ForEach(branches) { branch in
+                            branchRow(branch)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
             }
 
             Divider().overlay(Theme.stroke)
 
             HStack(spacing: 10) {
-                ActionTextButton(title: "New branch", systemName: "plus") {
-                    dismiss()
+                if creating {
+                    ActionTextButton(title: "Back", systemName: "arrow.left") {
+                        creating = false
+                        newName = ""
+                    }
+                    ActionTextButton(title: "Create", systemName: "plus", prominent: true) {
+                        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !name.isEmpty else { return }
+                        creating = false
+                        newName = ""
+                        Task { await onAction("create", GitBranch(
+                            name: name, current: false, tracking: "", ahead: 0, behind: 0, lastCommit: ""
+                        )) }
+                    }
+                    .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else {
+                    ActionTextButton(title: "New branch", systemName: "plus") {
+                        creating = true
+                    }
                 }
                 Spacer()
-                ActionTextButton(title: "Close", systemName: "xmark") { dismiss() }
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
@@ -863,7 +887,6 @@ struct GitLogSheet: View {
 
             HStack {
                 Spacer()
-                ActionTextButton(title: "Close", systemName: "xmark") { dismiss() }
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
@@ -1045,7 +1068,6 @@ struct GitConflictsSheet: View {
                     }
                 }
                 Spacer()
-                ActionTextButton(title: "Close", systemName: "xmark") { dismiss() }
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
@@ -1061,68 +1083,6 @@ struct GitConflictsSheet: View {
                 Task { await onAction("rebase_abort", "") }
             }
         }
-    }
-}
-
-// MARK: - New branch sheet
-
-struct GitNewBranchSheet: View {
-    let onCreate: (String) async -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String = ""
-    @State private var busy: Bool = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("New branch")
-                        .font(Theme.display(22))
-                        .foregroundStyle(Theme.text)
-                    Text("The branch starts at the current commit.")
-                        .font(.system(size: 11.5, design: .rounded))
-                        .foregroundStyle(Theme.textMuted)
-                }
-                Spacer()
-                ActionIconButton(systemName: "xmark", tint: Theme.danger, help: "Close") {
-                    dismiss()
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
-
-            Divider().overlay(Theme.stroke)
-
-            VStack(alignment: .leading, spacing: 8) {
-                FieldLabel(text: "Name")
-                ThemedTextField(placeholder: "feature/my-work", text: $name)
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
-
-            Divider().overlay(Theme.stroke)
-
-            HStack {
-                Spacer()
-                ActionTextButton(title: "Cancel", systemName: "xmark") { dismiss() }
-                ActionTextButton(title: "Create", systemName: "plus", prominent: true) {
-                    let text = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !text.isEmpty else { return }
-                    busy = true
-                    Task {
-                        await onCreate(text)
-                        busy = false
-                        dismiss()
-                    }
-                }
-                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 14)
-        }
-        .frame(width: 460, height: 280)
-        .background(Theme.background)
     }
 }
 
