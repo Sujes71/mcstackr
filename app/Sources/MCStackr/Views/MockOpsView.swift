@@ -310,8 +310,9 @@ struct MockParamsSheet: View {
     /// The body is written in the same field as the rest.
     private var isBody: Bool { action.id == "import-expectation" }
 
+    /// Only the parameters the operation cannot run without block it.
     private var canRun: Bool {
-        action.params?.allSatisfy { !(values[$0] ?? "").trimmingCharacters(in: .whitespaces).isEmpty } ?? true
+        (action.required ?? []).allSatisfy { !(values[$0] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
     var body: some View {

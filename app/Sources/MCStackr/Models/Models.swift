@@ -580,6 +580,7 @@ struct MockAction: Codable, Identifiable, Hashable {
     let label: String
     let group: String
     let params: [String]?
+    let required: [String]?
     let defaults: [String: String]?
     let destructive: Bool
     let enabled: Bool

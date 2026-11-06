@@ -21,6 +21,7 @@ type mockActionDTO struct {
 	Label          string            `json:"label"`
 	Group          string            `json:"group"`
 	Params         []string          `json:"params"`
+	Required       []string          `json:"required,omitempty"`
 	Defaults       map[string]string `json:"defaults,omitempty"`
 	Destructive    bool              `json:"destructive"`
 	Enabled        bool              `json:"enabled"`
@@ -61,6 +62,20 @@ func mockActions() []mockAction {
 			params: []string{"method", "path", "at_least"}},
 		{id: "retrieve-requests", label: "Retrieve requests", group: "Verification"},
 	}
+}
+
+// mockRequiredParams are the parameters an operation cannot run without. The
+// rest have a default or can be empty.
+func mockRequiredParams(actionID string) []string {
+	switch actionID {
+	case "create-expectation":
+		return []string{"method", "path", "status_code", "content_type", "body"}
+	case "import-expectation":
+		return []string{"body"}
+	case "verify-request":
+		return []string{"method", "path"}
+	}
+	return nil
 }
 
 // mockParamDefaults are the values a parameter starts with.
@@ -109,6 +124,7 @@ func (s *Server) handleMockOps(w http.ResponseWriter, r *http.Request) {
 				Label:          action.label,
 				Group:          action.group,
 				Params:         action.params,
+				Required:       mockRequiredParams(action.id),
 				Defaults:       mockParamDefaults(action.id),
 				Destructive:    action.destructive,
 				Enabled:        enabled,
@@ -170,8 +186,8 @@ func (s *Server) handleMockOpRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("action %q not found", req.Action))
 		return
 	}
-	for _, name := range def.params {
-		if strings.TrimSpace(req.Params[name]) == "" && def.id != "import-expectation" {
+	for _, name := range mockRequiredParams(def.id) {
+		if strings.TrimSpace(req.Params[name]) == "" {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("%s is required", name))
 			return
 		}
