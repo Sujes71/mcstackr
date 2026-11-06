@@ -56,7 +56,8 @@ struct SyncEnvWizard: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 640, height: 640)
+        .frame(minWidth: 460, idealWidth: 580, maxWidth: 640)
+        .frame(minHeight: 420, idealHeight: 560, maxHeight: 640)
         .background(Theme.background)
         .onAppear(perform: prefill)
         .sheet(isPresented: $confirmDelete) {

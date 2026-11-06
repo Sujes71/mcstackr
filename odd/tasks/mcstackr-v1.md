@@ -259,6 +259,16 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   branch. The merge and delete confirmations live in the branch sheet that
   opened them, and the detail of a commit lives in the log sheet that opened
   it, because a view cannot present two sheets at the same time.
+- **S69** — The branch window offers the log, the merge and the delete of a
+  branch, and the switch to a branch is the circle at the left of its row, not
+  another icon at the right. A branch that is already at the same commit as
+  the current one cannot be merged, the same way the original runtime
+  understood it.
+- **S70** — The commit log filters live: the hash, the author or the message
+  of a commit, over a bigger pool of commits than the one that is listed. The
+  log of another branch can be opened from the branch window, and only there
+  the commits can be marked to cherry-pick; applying them takes them in the
+  order of the log and pushes right after, like the original runtime did.
 - **S68** — The windows of the git section follow the standard of the rest of
   the app: the title and the subtitle in the header, one cross at the top
   right to close, and no button at the bottom that only closes the window. A
@@ -558,3 +568,30 @@ MockServer, request collections, git operations.
   the amend button. The refresh of the header was pressed with a change made
   outside the app and the new file appeared. The new branch form was filled
   and the branch was created.
+
+- **L68 (request):** "obviamente las ventanas de db ops mockops y queueops
+  deberian ser mas grandes para que quepa todo solo deberia hacer falta
+  scrollear en caso de que haya algo qeu aparece de repente como el last
+  operation que no aparece de primeras"
+- **L69 (request):** "revisa lo a nivel general"
+- **L70 (request):** "o bueno no hace falta, dejalo como estaba esta bien en
+  relaidad.mejor enfocate ne los logs de git no se parecen en nada a la
+  version de consola pero en nada revisalo prqeu te has dejado funcionalidades
+  revisalo de nuevo porque no se parece en muchas cosas, la de logs tenia cosas
+  como cherry pick un filter etc..."
+- **L71 (request):** "en branches quita el icono de la derecha del todo que es
+  el selector de branch simplemente dandole al circulo a l izquierda deberia
+  seleccionarse tiene ms sentido para mi"
+- **L72 (decision):** the windows of the operations keep a wide frame and grow
+  with their content, so everything fits and only the appearance of something
+  new, like the last operation, needs a scroll. The log of the git section got
+  the three things it was missing: the live filter over the hash, the author or
+  the message, the log of another branch opened from the branch window, and
+  the cherry-pick of the marked commits, which pushes right after. In the branch
+  window the switch to a branch is the circle at the left of the row, and a
+  branch that is already at the same commit as the current one cannot be
+  merged.
+- **L73 (bug):** the filter of the log did nothing because the button that
+  opened the search was inside the condition of the cherry-pick, so it did not
+  exist in the log of the current branch. The search field is always visible
+  now and the filter works in every log.

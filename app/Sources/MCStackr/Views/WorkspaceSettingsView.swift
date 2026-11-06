@@ -89,7 +89,8 @@ struct WorkspaceSettingsView: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 520, height: 520)
+        .frame(minWidth: 400, idealWidth: 500, maxWidth: 520)
+        .frame(minHeight: 320, idealHeight: 460, maxHeight: 520)
         .background(Theme.background)
         .task {
             description = state.selectedProfile?.description ?? ""

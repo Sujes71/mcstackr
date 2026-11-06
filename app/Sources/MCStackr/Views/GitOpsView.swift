@@ -15,18 +15,20 @@ struct GitOpsView: View {
     @State private var busy: Bool = false
     @State private var sheetTarget: SheetTarget?
     @State private var confirm: Confirm?
+    /// The log of a branch asked from the branch sheet.
+    @State private var pendingLogBranch: String?
 
     private enum SheetTarget: Identifiable {
         case commit(amend: Bool)
         case branches
-        case log
+        case log(branch: String?)
         case conflicts
 
         var id: String {
             switch self {
             case .commit(let amend): return amend ? "amend" : "commit"
             case .branches: return "branches"
-            case .log: return "log"
+            case .log(let branch): return "log-\(branch ?? "current")"
             case .conflicts: return "conflicts"
             }
         }
@@ -100,7 +102,14 @@ struct GitOpsView: View {
         .task {
             await reload()
         }
-        .sheet(item: $sheetTarget) { target in
+        .sheet(item: $sheetTarget, onDismiss: {
+            // The branch sheet asks for the log of a branch: it is opened
+            // once the sheet that asked for it is gone.
+            if let branch = pendingLogBranch {
+                pendingLogBranch = nil
+                sheetTarget = .log(branch: branch as String?)
+            }
+        }) { target in
             switch target {
             case .commit(let amend):
                 GitCommitSheet(amend: amend, lastCommit: git?.lastCommit ?? "") { message in
@@ -112,9 +121,20 @@ struct GitOpsView: View {
                     current: git?.branch ?? ""
                 ) { action, branch in
                     await branchAction(action, branch)
+                } onOpenLog: { branch in
+                    pendingLogBranch = branch.name
                 }
-            case .log:
-                GitLogSheet(commits: git?.commits ?? [])
+            case .log(let branch):
+                GitLogSheet(
+                    branch: branch ?? "",
+                    initialCommits: branch == nil ? (git?.commits ?? []) : [],
+                    onCherryPick: { hashes in
+                        await perform(
+                            "cherry_pick",
+                            ["hashes": hashes.joined(separator: ","), "push": "true"]
+                        )
+                    }
+                )
             case .conflicts:
                 GitConflictsSheet(
                     conflicts: git?.conflicts ?? [],
@@ -414,7 +434,7 @@ struct GitOpsView: View {
                 }
 
                 ActionTextButton(title: "Log", systemName: "list.bullet") {
-                    sheetTarget = .log
+                    sheetTarget = .log(branch: nil)
                 }
 
                 if git.hasUnpushed {
@@ -619,7 +639,8 @@ struct GitCommitSheet: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
         }
-        .frame(width: 520, height: 340)
+        .frame(minWidth: 300, idealWidth: 440, maxWidth: 520)
+        .frame(minHeight: 200, idealHeight: 250, maxHeight: 320)
         .background(Theme.background)
         .onAppear {
             if amend { message = lastCommit }
@@ -633,6 +654,9 @@ struct GitBranchesSheet: View {
     let branches: [GitBranch]
     let current: String
     let onAction: (String, GitBranch) async -> Void
+    /// The log of a branch is asked to the parent, which opens it once this
+    /// sheet is gone.
+    let onOpenLog: (GitBranch) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selected: String = ""
@@ -734,7 +758,8 @@ struct GitBranchesSheet: View {
                         creating = false
                         newName = ""
                         Task { await onAction("create", GitBranch(
-                            name: name, current: false, tracking: "", ahead: 0, behind: 0, lastCommit: ""
+                            name: name, current: false, tracking: "", ahead: 0, behind: 0,
+                            lastCommit: "", head: ""
                         )) }
                     }
                     .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -748,7 +773,8 @@ struct GitBranchesSheet: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
         }
-        .frame(width: 620, height: 460)
+        .frame(minWidth: 380, idealWidth: 500, maxWidth: 580)
+        .frame(minHeight: 200, idealHeight: creating ? 240 : 320, maxHeight: 460)
         .background(Theme.background)
         .sheet(item: $confirm) { target in
             ConfirmSheet(
@@ -768,12 +794,28 @@ struct GitBranchesSheet: View {
         }
     }
 
+    /// A branch that is already at the same commit has nothing to merge, the
+    /// same way the original runtime understood it.
+    private func canMerge(_ branch: GitBranch) -> Bool {
+        guard let current = branches.first(where: { $0.current }) else { return true }
+        guard !branch.head.isEmpty, !current.head.isEmpty else { return true }
+        return branch.head != current.head
+    }
+
     private func branchRow(_ branch: GitBranch) -> some View {
         let isSelected = selected == branch.name
         return HStack(spacing: 10) {
-            Image(systemName: branch.current ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 11))
-                .foregroundStyle(branch.current ? Theme.accent : Theme.textDim)
+            // The circle at the left switches to the branch.
+            Button {
+                guard !branch.current else { return }
+                Task { await onAction("checkout", branch) }
+            } label: {
+                Image(systemName: branch.current ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(branch.current ? Theme.accent : Theme.textDim)
+            }
+            .buttonStyle(.plain)
+            .help("Switch to this branch")
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -807,14 +849,20 @@ struct GitBranchesSheet: View {
             Spacer(minLength: 4)
 
             if !branch.current {
-                ActionIconButton(systemName: "arrow.left.arrow.right", tint: Theme.info, help: "Merge into the current branch") {
+                ActionIconButton(systemName: "list.bullet", tint: Theme.textMuted, help: "The log of the branch") {
+                    onOpenLog(branch)
+                    dismiss()
+                }
+                ActionIconButton(
+                    systemName: "arrow.left.arrow.right",
+                    tint: canMerge(branch) ? Theme.info : Theme.textDim,
+                    help: canMerge(branch) ? "Merge into the current branch" : "The branch is already at the same commit"
+                ) {
+                    guard canMerge(branch) else { return }
                     confirm = .merge(branch)
                 }
                 ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete the branch") {
                     confirm = .delete(branch)
-                }
-                ActionIconButton(systemName: "arrow.triangle.branch", tint: Theme.accent, help: "Check out the branch") {
-                    Task { await onAction("checkout", branch) }
                 }
             }
         }
@@ -828,73 +876,258 @@ struct GitBranchesSheet: View {
 
 // MARK: - Log sheet
 
+/// The commit log of the current branch or of another one, with the live
+/// filter and the cherry-pick of the original runtime.
 struct GitLogSheet: View {
-    let commits: [GitCommit]
+    /// Empty means the current branch.
+    let branch: String
+    let initialCommits: [GitCommit]
+    let onCherryPick: ([String]) async -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var state: AppState
     /// The detail lives here: a view cannot present two sheets at once.
     @State private var detail: GitCommit?
+    @State private var commits: [GitCommit] = []
+    @State private var pool: [GitCommit] = []
+    @State private var search: String = ""
+    /// The commits marked to cherry-pick.
+    @State private var marked: Set<String> = []
+    @State private var busy: Bool = false
+
+    /// The cherry-pick is only offered in the log of another branch, like in
+    /// the original runtime.
+    private var canCherryPick: Bool { !branch.isEmpty }
+
+    /// The commits the filter leaves, like the original runtime: the hash,
+    /// the author or the message.
+    private var visible: [GitCommit] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return commits }
+        var matched: [GitCommit] = []
+        for commit in pool {
+            if commit.hash.lowercased().contains(query)
+                || commit.author.lowercased().contains(query)
+                || commit.message.lowercased().contains(query) {
+                matched.append(commit)
+                if matched.count >= 50 { break }
+            }
+        }
+        return matched
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Log")
-                        .font(Theme.display(22))
-                        .foregroundStyle(Theme.text)
-                    Text("\(commits.count) commits")
-                        .font(.system(size: 11.5, design: .rounded))
-                        .foregroundStyle(Theme.textMuted)
-                }
-                Spacer()
-                ActionIconButton(systemName: "xmark", tint: Theme.danger, help: "Close") {
-                    dismiss()
-                }
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
-
+            header
             Divider().overlay(Theme.stroke)
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(commits) { commit in
-                        HStack(spacing: 10) {
-                            Text(commit.hash)
-                                .font(.system(size: 10.5, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Theme.violet)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(commit.message)
-                                    .font(.system(size: 11.5, design: .rounded))
-                                    .foregroundStyle(Theme.text)
-                                    .lineLimit(1)
-                                Text("\(commit.author) · \(commit.date)")
-                                    .font(.system(size: 10, design: .rounded))
-                                    .foregroundStyle(Theme.textDim)
-                            }
-                            Spacer(minLength: 4)
+            searchField
+            Divider().overlay(Theme.stroke)
+
+            if visible.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: search.isEmpty ? "clock.arrow.circlepath" : "magnifyingglass")
+                        .font(.system(size: 24, weight: .light))
+                        .foregroundStyle(Theme.textDim)
+                    Text(search.isEmpty ? "No commits" : "No matching commits")
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundStyle(Theme.textDim)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 1) {
+                        ForEach(visible) { commit in
+                            commitRow(commit)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 7)
-                        .contentShape(Rectangle())
-                        .onTapGesture { detail = commit }
                     }
+                    .padding(.vertical, 6)
                 }
-                .padding(.vertical, 6)
             }
 
             Divider().overlay(Theme.stroke)
-
-            HStack {
-                Spacer()
-            }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 14)
+            footer
         }
-        .frame(width: 680, height: 520)
+        .frame(minWidth: 420, idealWidth: 540, maxWidth: 620)
+        .frame(minHeight: 240, idealHeight: 340, maxHeight: 520)
         .background(Theme.background)
         .sheet(item: $detail) { commit in
             GitCommitDetailSheet(commit: commit)
+        }
+        .task {
+            if branch.isEmpty {
+                commits = initialCommits
+                pool = initialCommits
+            } else {
+                await load(n: 30)
+            }
+            // The filter works over a bigger pool, like the original runtime.
+            await loadPool()
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("Commit log")
+                        .font(Theme.display(22))
+                        .foregroundStyle(Theme.text)
+                    if !branch.isEmpty {
+                        TechBadge(text: branch, color: Theme.violet)
+                    }
+                }
+                Text(subtitle)
+                    .font(.system(size: 11.5, design: .rounded))
+                    .foregroundStyle(Theme.textMuted)
+            }
+            Spacer()
+            ActionIconButton(systemName: "xmark", tint: Theme.danger, help: "Close") {
+                dismiss()
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 18)
+    }
+
+    private var subtitle: String {
+        let total = search.isEmpty ? commits.count : visible.count
+        let filtered = search.isEmpty ? "" : " (filtered)"
+        return "\(total) commits\(filtered)"
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.accent)
+            ThemedTextField(placeholder: "Search by hash, author or message", text: $search)
+            ActionIconButton(systemName: "xmark.circle.fill", tint: Theme.textMuted, help: "Clear the search") {
+                search = ""
+            }
+            .opacity(search.isEmpty ? 0.35 : 1)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 10)
+    }
+
+    private func commitRow(_ commit: GitCommit) -> some View {
+        HStack(spacing: 10) {
+            if canCherryPick {
+                Button {
+                    toggle(commit.hash)
+                } label: {
+                    Image(systemName: marked.contains(commit.hash) ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(marked.contains(commit.hash) ? Theme.violet : Theme.textDim)
+                }
+                .buttonStyle(.plain)
+                .help("Mark the commit to cherry-pick")
+            }
+
+            Text(commit.hash)
+                .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                .foregroundStyle(Theme.violet)
+
+            Text(highlighted(commit.message))
+                .font(.system(size: 11.5, design: .rounded))
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
+
+            Text("\(commit.author) · \(commit.date)")
+                .font(.system(size: 10, design: .rounded))
+                .foregroundStyle(Theme.textDim)
+                .lineLimit(1)
+
+            Spacer(minLength: 4)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
+        .contentShape(Rectangle())
+        .onTapGesture { detail = commit }
+    }
+
+    /// The matched text is highlighted, like in the original runtime.
+    private func highlighted(_ text: String) -> AttributedString {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        var result = AttributedString(text)
+        guard !query.isEmpty else { return result }
+        let lower = text.lowercased()
+        let needle = query.lowercased()
+        var searchStart = lower.startIndex
+        while let found = lower.range(of: needle, range: searchStart..<lower.endIndex) {
+            if let attributed = Range(found, in: result) {
+                result[attributed].foregroundColor = Theme.running
+                result[attributed].font = .system(size: 11.5, weight: .bold, design: .rounded)
+            }
+            searchStart = found.upperBound
+            if searchStart >= lower.endIndex { break }
+        }
+        return result
+    }
+
+    private func toggle(_ hash: String) {
+        if marked.contains(hash) {
+            marked.remove(hash)
+        } else {
+            marked.insert(hash)
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            if canCherryPick {
+                ActionTextButton(
+                    title: marked.isEmpty ? "Cherry-pick" : "Cherry-pick \(marked.count)",
+                    systemName: "arrow.triangle.branch",
+                    prominent: !marked.isEmpty
+                ) {
+                    applyCherryPick()
+                }
+                .disabled(marked.isEmpty || busy)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
+    }
+
+    /// The search works over a bigger pool, like the original runtime.
+    private func loadPool() async {
+        await load(n: 200)
+    }
+
+    /// Loads the commits of the branch. The empty branch is the current one.
+    private func load(n: Int) async {
+        let result = await state.runGitOp(
+            op: "log_branch",
+            params: ["branch": branch, "n": "\(n)"]
+        )
+        let lines = (result?.output ?? "").split(separator: "\n").map(String.init)
+        var loaded: [GitCommit] = []
+        for line in lines {
+            let parts = line.split(separator: "|", maxSplits: 3).map(String.init)
+            guard parts.count == 4 else { continue }
+            loaded.append(GitCommit(
+                hash: parts[0], author: parts[1], date: parts[2], message: parts[3]
+            ))
+        }
+        if !loaded.isEmpty {
+            commits = loaded
+            pool = loaded
+        }
+    }
+
+    /// The marked commits are applied in the order they appear in the log.
+    private func applyCherryPick() {
+        let hashes = visible.filter { marked.contains($0.hash) }.map(\.hash)
+        guard !hashes.isEmpty else { return }
+        busy = true
+        Task {
+            await onCherryPick(hashes)
+            busy = false
+            marked.removeAll()
         }
     }
 }
@@ -970,7 +1203,8 @@ struct GitCommitDetailSheet: View {
                 }
             }
         }
-        .frame(width: 860, height: 560)
+        .frame(minWidth: 560, idealWidth: 760, maxWidth: 880)
+        .frame(minHeight: 280, idealHeight: 420, maxHeight: 560)
         .background(Theme.background)
         .task {
             let result = await state.runGitOp(op: "commit_files", params: ["hash": commit.hash])
@@ -1072,7 +1306,8 @@ struct GitConflictsSheet: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
         }
-        .frame(width: 620, height: 440)
+        .frame(minWidth: 380, idealWidth: 520, maxWidth: 600)
+        .frame(minHeight: 220, idealHeight: 320, maxHeight: 460)
         .background(Theme.background)
         .sheet(isPresented: $confirmAbort) {
             ConfirmSheet(

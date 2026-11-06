@@ -64,7 +64,8 @@ struct LogsSheet: View {
             }
             .background(Theme.background)
         }
-        .frame(minWidth: 780, minHeight: 520)
+        .frame(minWidth: 560, idealWidth: 720, maxWidth: 820)
+        .frame(minHeight: 300, idealHeight: 460, maxHeight: 620)
         .background(Theme.background)
         .task { await consume() }
     }

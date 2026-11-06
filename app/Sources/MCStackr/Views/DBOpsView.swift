@@ -98,7 +98,8 @@ struct DBOpsView: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 660, height: 680)
+        .frame(minWidth: 520, idealWidth: 640, maxWidth: 700)
+        .frame(minHeight: 320, maxHeight: 900)
         .background(Theme.background)
         .task(id: service.name) {
             await reload(selectFirst: true)

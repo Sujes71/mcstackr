@@ -30,6 +30,7 @@ type GitBranch struct {
 	Ahead      int    `json:"ahead"`
 	Behind     int    `json:"behind"`
 	LastCommit string `json:"lastCommit"`
+	Head       string `json:"head"`
 }
 
 // GitStash is one stash entry.
@@ -94,6 +95,15 @@ func (s *Server) gitWorkDir() string {
 	return "."
 }
 
+// branchHead is the commit a branch points at, empty when it cannot be read.
+func branchHead(dir, branch string) string {
+	head, err := git.BranchHead(dir, branch)
+	if err != nil {
+		return ""
+	}
+	return head
+}
+
 // gitState builds the state of the repository the same way the console did.
 func (s *Server) gitState(profile string) GitState {
 	state := GitState{
@@ -153,6 +163,7 @@ func (s *Server) gitState(profile string) GitState {
 				Ahead:      b.Ahead,
 				Behind:     b.Behind,
 				LastCommit: b.LastCommit,
+				Head:       branchHead(dir, b.Name),
 			})
 			if b.Current {
 				state.Branch = b.Name
@@ -365,10 +376,32 @@ func (s *Server) runGitOp(dir, op string, raw map[string]any) (string, error) {
 		}
 		return "popped the stash", nil
 	case "cherry_pick":
-		if err := git.CherryPick(dir, []string{params["hash"]}); err != nil {
+		// The hashes come in order, oldest first, like the original runtime.
+		var hashes []string
+		for _, h := range strings.Split(params["hashes"], ",") {
+			h = strings.TrimSpace(h)
+			if h != "" {
+				hashes = append(hashes, h)
+			}
+		}
+		if len(hashes) == 0 {
+			if h := strings.TrimSpace(params["hash"]); h != "" {
+				hashes = append(hashes, h)
+			}
+		}
+		if len(hashes) == 0 {
+			return "", fmt.Errorf("no commits to cherry-pick")
+		}
+		if err := git.CherryPick(dir, hashes); err != nil {
 			return "", err
 		}
-		return "cherry-picked " + params["hash"], nil
+		// The original runtime pushes right after the cherry-pick.
+		if params["push"] == "true" {
+			if err := git.Push(dir); err != nil {
+				return "", fmt.Errorf("cherry-pick ok but push failed: %w", err)
+			}
+		}
+		return "cherry-picked " + strings.Join(hashes, ", "), nil
 	case "resolve_ours":
 		if err := git.ResolveOurs(dir, params["path"]); err != nil {
 			return "", err
@@ -436,9 +469,10 @@ func (s *Server) runGitOp(dir, op string, raw map[string]any) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// The same shape the original runtime parses: hash|author|date|message
 		lines := make([]string, 0, len(commits))
 		for _, c := range commits {
-			lines = append(lines, fmt.Sprintf("%s %s", c.Hash, c.Message))
+			lines = append(lines, fmt.Sprintf("%s|%s|%s|%s", c.Hash, c.Author, c.Date, c.Message))
 		}
 		return strings.Join(lines, "\n"), nil
 	default:

@@ -63,7 +63,8 @@ struct CustomActionWizard: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 680, height: 560)
+        .frame(minWidth: 480, idealWidth: 600, maxWidth: 680)
+        .frame(minHeight: 340, idealHeight: 480, maxHeight: 560)
         .background(Theme.background)
         .onAppear(perform: prefill)
         .sheet(isPresented: $confirmDelete) {
@@ -312,7 +313,8 @@ struct CustomActionParamsView: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
         }
-        .frame(width: 520, height: 420)
+        .frame(minWidth: 380, idealWidth: 480, maxWidth: 520)
+        .frame(minHeight: 260, idealHeight: 340, maxHeight: 420)
         .background(Theme.background)
     }
 

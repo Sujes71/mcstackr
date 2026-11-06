@@ -76,7 +76,8 @@ struct NewWorkspaceView: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 560)
+        .frame(minWidth: 380, idealWidth: 500, maxWidth: 560)
+        .frame(minHeight: 220, idealHeight: 300, maxHeight: 400)
         .background(Theme.background)
     }
 

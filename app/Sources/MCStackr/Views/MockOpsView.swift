@@ -66,7 +66,8 @@ struct MockOpsView: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 660, height: 680)
+        .frame(minWidth: 520, idealWidth: 640, maxWidth: 700)
+        .frame(minHeight: 320, maxHeight: 900)
         .background(Theme.background)
         .task { await reload() }
         .sheet(item: $confirmTarget) { target in
@@ -419,7 +420,8 @@ struct MockParamsSheet: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
         }
-        .frame(width: 620, height: 560)
+        .frame(minWidth: 420, idealWidth: 560, maxWidth: 620)
+        .frame(minHeight: 300, idealHeight: 420, maxHeight: 560)
         .background(Theme.background)
         .onAppear(perform: prefill)
     }

@@ -84,7 +84,8 @@ struct AddServiceView: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 660, height: 680)
+        .frame(minWidth: 480, idealWidth: 560, maxWidth: 660)
+        .frame(minHeight: 380, idealHeight: 520, maxHeight: 680)
         .background(Theme.background)
     }
 

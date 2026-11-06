@@ -630,6 +630,8 @@ struct GitBranch: Codable, Identifiable, Hashable {
     let ahead: Int
     let behind: Int
     let lastCommit: String
+    /// The commit the branch points at.
+    let head: String
 
     var id: String { name }
 }

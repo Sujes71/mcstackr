@@ -34,7 +34,8 @@ struct AddPortForwardView: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 640, height: 620)
+        .frame(minWidth: 460, idealWidth: 580, maxWidth: 640)
+        .frame(minHeight: 380, idealHeight: 520, maxHeight: 620)
         .background(Theme.background)
         .task { await loadContexts() }
     }
@@ -431,7 +432,8 @@ struct PortForwardEditorView: View {
             Divider().overlay(Theme.stroke)
             footer
         }
-        .frame(width: 640, height: 560)
+        .frame(minWidth: 460, idealWidth: 560, maxWidth: 640)
+        .frame(minHeight: 320, idealHeight: 460, maxHeight: 560)
         .background(Theme.background)
         .onAppear { localPort = String(forward.localPort) }
         .sheet(isPresented: $confirmDelete) {
