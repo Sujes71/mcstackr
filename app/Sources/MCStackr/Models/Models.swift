@@ -319,9 +319,37 @@ struct DBJobNotice: Identifiable, Equatable {
     let detail: String
     /// When the operation finished, so the notice can show the date.
     let finishedAt: String
+    /// How long the notice stays on screen. When it is not set, a success
+    /// stays eight seconds and a failure sixteen, so its text can be read.
+    let seconds: UInt64?
+
+    init(
+        id: String,
+        service: String,
+        label: String,
+        syncEnv: String,
+        succeeded: Bool,
+        detail: String,
+        finishedAt: String,
+        seconds: UInt64? = nil
+    ) {
+        self.id = id
+        self.service = service
+        self.label = label
+        self.syncEnv = syncEnv
+        self.succeeded = succeeded
+        self.detail = detail
+        self.finishedAt = finishedAt
+        self.seconds = seconds
+    }
 
     var title: String {
         succeeded ? "\(label) finished" : "\(label) failed"
+    }
+
+    /// How long this notice waits before it hides itself.
+    var lifetime: UInt64 {
+        seconds ?? (succeeded ? 8 : 16)
     }
 }
 

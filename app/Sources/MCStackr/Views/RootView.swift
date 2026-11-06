@@ -155,6 +155,16 @@ struct ErrorBanner: View {
             .padding(.vertical, 8)
             .frame(maxWidth: 720)
             .transition(.move(edge: .top).combined(with: .opacity))
+            .task(id: message) {
+                // The error flashes for five seconds, like the console
+                // runtime does, and then it hides itself.
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if state.errorMessage == message {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        state.errorMessage = nil
+                    }
+                }
+            }
         }
     }
 }

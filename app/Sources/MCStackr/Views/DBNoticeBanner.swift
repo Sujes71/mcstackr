@@ -77,8 +77,7 @@ struct DBNoticeBanner: View {
             .transition(.move(edge: .top).combined(with: .opacity))
             .task(id: notice.id) {
                 // A success can be read at a glance; an error needs more time.
-                let seconds: UInt64 = notice.succeeded ? 8 : 16
-                try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: notice.lifetime * 1_000_000_000)
                 if state.dbNotice?.id == notice.id {
                     withAnimation(.easeOut(duration: 0.2)) {
                         state.dismissDBNotice()

@@ -283,6 +283,11 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   content being read. The result of a git operation is one of those notices,
   and the engine says whether the operation failed, so a failure is never
   shown as a success.
+- **S72** — The notices float over the content of the section: they never
+  displace it, the same way the notices of the app always floated. The error
+  of the app hides itself after five seconds, like the console runtime does,
+  and the notice of a git operation lives five seconds as well, because that
+  is how long the message of the console runtime stays.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -371,9 +376,19 @@ MockServer, request collections, git operations.
   `Stage all` reads "Stage all finished" in the same place; the notice is
   still there after changing to another section; the Git view has no message
   strip between the content and the footer.
+- [x] T77 — The notices float over the content and they hide themselves: the
+  error banner and the notice of the last operation left the flow of the
+  section and became an overlay over its content, so they never displace it,
+  and the error of the app hides itself after five seconds instead of
+  waiting for the cross. The notice of a git operation lives five seconds,
+  the time the message of the console runtime lives. Evidence: driven in the
+  app over the accessibility tree, the notice of a failing `Push` sits at
+  y=314, over the content, and the content of the section stays at y=336
+  before, during and after the notice; the notice disappears on its own
+  about five seconds later; the error banner, provoked by killing the engine
+  and asking for a refresh, appears and disappears on its own as well.
 
 ## Log
-
 - **L1 (user request, verbatim):**
   > saltemos los tests empieza
   >
@@ -652,3 +667,20 @@ MockServer, request collections, git operations.
   gone. The engine says now whether a git operation failed, because the text
   of a git error reads `git push: …`: the old guess by prefix called a
   failure a success.
+- **L80 (request, verbatim):** "vale vi un fallo la alerta desplaza todo hacia
+  abajo creo que en docker y los otros no es asi se pone por encima..."
+- **L81 (request, verbatim):** "a vale y respecto a loque se persiste creo que
+  no es una alerta es por ejemplo las alertas de tipo triangulo canceled que se
+  persiste arriba eso tambien se queda perma"
+- **L82 (decision):** the notices float over the content of the section, the
+  way the notices of the app always floated: the first version of T76 put
+  them in the flow of the section and they displaced everything under them,
+  which is not how docker and the other sections behave. They are an overlay
+  over the content now, at the top, and they never displace it. The error of
+  the app, the one with the triangle, hid itself never: it waits for the
+  cross. It hides itself after five seconds now, like the console runtime,
+  which clears the flash of an error with `ClearActionAfter(5 * time.Second)`.
+  The notice of a git operation lives five seconds as well, the time the
+  message of the console runtime lives; the notice of a DB operation keeps
+  its own rule, eight seconds for a success and sixteen for a failure, so the
+  text of a failure can be read.

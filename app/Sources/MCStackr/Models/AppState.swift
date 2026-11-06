@@ -1034,7 +1034,8 @@ final class AppState: ObservableObject {
 
     /// Reports the result of a git operation with the notice every operation
     /// of the app uses, so the git section shows it the same way the rest of
-    /// the app does.
+    /// the app does. The notice lives five seconds, like the message of the
+    /// console runtime.
     func reportGitOperation(op: String, detail: String, succeeded: Bool) {
         let root = gitState?.root ?? ""
         let repository = root.split(separator: "/").last.map(String.init) ?? "Git"
@@ -1045,7 +1046,8 @@ final class AppState: ObservableObject {
             syncEnv: gitState?.branch ?? "",
             succeeded: succeeded,
             detail: detail,
-            finishedAt: isoNow()
+            finishedAt: isoNow(),
+            seconds: 5
         )
     }
 
