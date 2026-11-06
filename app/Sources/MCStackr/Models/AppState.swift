@@ -402,6 +402,60 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// The deployments of a namespace, for the manager.
+    ///
+    /// The error comes back to the caller instead of the global error
+    /// banner: the manager is a window, and the banner of the app would stay
+    /// behind it. The manager also asks for the list every few seconds, and
+    /// it must not take the error of the app away.
+    func k8sDeployments(context: String, namespace: String) async -> (deployments: [K8sDeployment]?, error: String?) {
+        guard let client else { return (nil, "The engine is not running.") }
+        do {
+            let deployments: [K8sDeployment] = try await client.get(
+                "/api/k8s/deployments",
+                query: [
+                    URLQueryItem(name: "context", value: context),
+                    URLQueryItem(name: "namespace", value: namespace),
+                ]
+            )
+            return (deployments, nil)
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+    }
+
+    /// Runs one action of the manager over a deployment.
+    ///
+    /// The error comes back to the caller instead of the global error
+    /// banner: the manager is a window, and the banner of the app would stay
+    /// behind it.
+    func runK8sDeploymentAction(
+        _ action: String,
+        context: String,
+        namespace: String,
+        deployment: String,
+        replicas: Int? = nil
+    ) async -> (output: String?, error: String?) {
+        guard let client else { return (nil, "The engine is not running.") }
+        var query = [
+            URLQueryItem(name: "context", value: context),
+            URLQueryItem(name: "namespace", value: namespace),
+            URLQueryItem(name: "deployment", value: deployment),
+        ]
+        if let replicas {
+            query.append(URLQueryItem(name: "replicas", value: "\(replicas)"))
+        }
+        do {
+            let result: K8sActionResult = try await client.post(
+                "/api/k8s/deployments/\(action)",
+                query: query
+            )
+            return (result.output, nil)
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+    }
+
     /// First local port from 8080 that no configured forward already uses.
     func nextFreeLocalPort() -> Int {
         let used = Set((environmentDetail?.portForwards ?? []).map(\.localPort))

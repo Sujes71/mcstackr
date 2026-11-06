@@ -288,6 +288,14 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   of the app hides itself after five seconds, like the console runtime does,
   and the notice of a git operation lives five seconds as well, because that
   is how long the message of the console runtime stays.
+- **S73** — The app manages the deployments of a Kubernetes namespace the
+  way the console runtime did: the list of the deployments with their state,
+  and the actions restart, scale, logs, describe and delete. The shell of
+  the console runtime is not one of them: an app cannot hand its terminal
+  over to kubectl. The manager is a window of the Port Forwards section,
+  and it asks the cluster again every three seconds, like the console
+  runtime did. A destructive action asks first, with the window the app
+  uses for every destructive action.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -387,6 +395,23 @@ MockServer, request collections, git operations.
   before, during and after the notice; the notice disappears on its own
   about five seconds later; the error banner, provoked by killing the engine
   and asking for a refresh, appears and disappears on its own as well.
+- [x] T78 — Kubernetes deployment manager: engine `internal/portforward/k8s.go`
+  (the deployments of the console runtime, without its shell) plus
+  `GET /api/k8s/deployments` and `POST /api/k8s/deployments/{action}` with the
+  actions restart, scale, logs, describe and delete; the app's
+  `K8sManagerView` (context → namespace → deployments → actions → scale and
+  the result of the output), opened from the header of the Port Forwards
+  section. Evidence: the engine answers with the deployments of the namespace
+  (`{"name":"api","desired":3,"available":3,...,"lastRestarted":"8m"}`), the
+  action unknown and the scale without replicas are rejected with a 400, and
+  the shell is not an action at all (`unknown action: shell`); driven in the
+  app over the accessibility tree with a kubectl that answers with canned
+  data, the flow goes context → namespace → deployments → actions, the list
+  shows `api, 3/3, 35d` and `worker, 1/2, 23h`, restart answers "Restart
+  requested" and the feedback hides itself five seconds later, scale asks for
+  the replicas with three as the current count and four as the answer, the
+  output of logs and of describe shows in the result window, and the delete
+  asks first with the window of the app and ends in "Deployment deleted".
 
 ## Log
 - **L1 (user request, verbatim):**
@@ -684,3 +709,21 @@ MockServer, request collections, git operations.
   message of the console runtime lives; the notice of a DB operation keeps
   its own rule, eight seconds for a success and sixteen for a failure, so the
   text of a failure can be read.
+- **L83 (request, verbatim):** "vale basandonos en el original vamos a
+  ponernos con esto 1. Gestor de deployments de K8s ✗ — restart, scale, logs,
+  describe, delete ✗ (el original los tiene ✗). quite el shell porque lo veo
+  innecesario. revisa si me deje algna funcionalidad relacionada con esto y
+  si no vamos con ello."
+- **L84 (decision):** the answer to "did I leave any functionality related to
+  this?" is that there was none to leave: the engine of the app had no
+  `internal/portforward/k8s.go` at all, only the discovery of contexts,
+  namespaces and services that the port-forward wizard uses, and the manager
+  reuses those. The whole manager is new, and it is the port of the one of
+  the console runtime without its shell: an app cannot hand its terminal over
+  to kubectl, and the shell is not wanted anyway. Two things the console
+  runtime did not have, and that the app needed: the scale asks for the
+  number of replicas (the console runtime scaled to one more than the
+  current count without asking), and the logs are the last hundred lines
+  instead of a stream that only the terminal could show. The manager opens
+  from the header of the Port Forwards section, which is where Kubernetes
+  lives in the app.

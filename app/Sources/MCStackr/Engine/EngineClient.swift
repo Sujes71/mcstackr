@@ -43,8 +43,8 @@ struct EngineClient {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    func post<T: Decodable>(_ path: String, body: (any Encodable)? = nil) async throws -> T {
-        let data = try await perform(method: "POST", path: path, query: [], body: body)
+    func post<T: Decodable>(_ path: String, body: (any Encodable)? = nil, query: [URLQueryItem] = []) async throws -> T {
+        let data = try await perform(method: "POST", path: path, query: query, body: body)
         return try JSONDecoder().decode(T.self, from: data)
     }
 

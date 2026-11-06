@@ -177,6 +177,52 @@ struct DiscoveredService: Codable, Identifiable, Hashable {
     var id: String { name }
 }
 
+/// A deployment of a Kubernetes namespace, as the manager of the app shows it.
+struct K8sDeployment: Codable, Identifiable, Hashable {
+    let name: String
+    let desired: Int
+    let available: Int
+    let updated: Int
+    let progressing: Bool
+    let lastRestarted: String
+    let age: String
+    let strategy: String
+
+    var id: String { name }
+
+    /// The state of the deployment, the way the console runtime understood it:
+    /// a deployment with no replicas is stopped, one with fewer available
+    /// than wanted is failing, one with fewer updated than wanted is
+    /// progressing, and the rest is running.
+    var state: K8sDeploymentState {
+        if desired == 0 { return .stopped }
+        if available < desired { return .failing }
+        if updated < desired { return .progressing }
+        return .running
+    }
+}
+
+enum K8sDeploymentState: String {
+    case running
+    case progressing
+    case failing
+    case stopped
+
+    var title: String {
+        switch self {
+        case .running: return "running"
+        case .progressing: return "progressing"
+        case .failing: return "failing"
+        case .stopped: return "stopped"
+        }
+    }
+}
+
+/// The output of an action of the manager.
+struct K8sActionResult: Codable {
+    let output: String
+}
+
 struct PortForwardRuntime: Codable {
     let state: String
     let error: String?

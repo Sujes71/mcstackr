@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -232,6 +233,23 @@ type portForwardRequest struct {
 type discoveredServiceDTO struct {
 	Name       string `json:"name"`
 	RemotePort int    `json:"remotePort"`
+}
+
+// deploymentDTO is a deployment of a namespace, as the manager shows it.
+type deploymentDTO struct {
+	Name          string `json:"name"`
+	Desired       int    `json:"desired"`
+	Available     int    `json:"available"`
+	Updated       int    `json:"updated"`
+	Progressing   bool   `json:"progressing"`
+	LastRestarted string `json:"lastRestarted"`
+	Age           string `json:"age"`
+	Strategy      string `json:"strategy"`
+}
+
+// k8sActionDTO is what an action of the manager returns.
+type k8sActionDTO struct {
+	Output string `json:"output"`
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -571,6 +589,82 @@ func (s *Server) handleK8sServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toDiscoveredServices(forwards))
+}
+
+// handleK8sDeployments lists the deployments of a namespace.
+func (s *Server) handleK8sDeployments(w http.ResponseWriter, r *http.Request) {
+	contextName := strings.TrimSpace(r.URL.Query().Get("context"))
+	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	if contextName == "" || namespace == "" {
+		writeError(w, http.StatusBadRequest, "context and namespace are required")
+		return
+	}
+	deployments, err := portforward.DiscoverDeployments(contextName, namespace)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	out := make([]deploymentDTO, 0, len(deployments))
+	for _, d := range deployments {
+		out = append(out, deploymentDTO{
+			Name:          d.Name,
+			Desired:       d.Desired,
+			Available:     d.Available,
+			Updated:       d.Updated,
+			Progressing:   d.Progressing,
+			LastRestarted: d.LastRestarted,
+			Age:           d.Age,
+			Strategy:      d.Strategy,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleK8sDeploymentAction runs one action of the manager over a deployment.
+//
+// The actions are the ones of the console runtime: restart, scale, logs,
+// describe and delete. The shell is not one of them.
+func (s *Server) handleK8sDeploymentAction(w http.ResponseWriter, r *http.Request) {
+	action := r.PathValue("action")
+	contextName := strings.TrimSpace(r.URL.Query().Get("context"))
+	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	deployment := strings.TrimSpace(r.URL.Query().Get("deployment"))
+	if contextName == "" || namespace == "" || deployment == "" {
+		writeError(w, http.StatusBadRequest, "context, namespace and deployment are required")
+		return
+	}
+
+	var out string
+	var err error
+	switch action {
+	case "restart":
+		out, err = portforward.RolloutRestart(contextName, namespace, deployment)
+	case "scale":
+		replicas, convErr := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("replicas")))
+		if convErr != nil || replicas < 0 {
+			writeError(w, http.StatusBadRequest, "replicas must be a number of zero or more")
+			return
+		}
+		out, err = portforward.ScaleDeployment(contextName, namespace, deployment, replicas)
+	case "logs":
+		lines := 100
+		if v, convErr := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("lines"))); convErr == nil && v > 0 {
+			lines = v
+		}
+		out, err = portforward.GetDeploymentLogs(contextName, namespace, deployment, lines)
+	case "describe":
+		out, err = portforward.DescribeDeployment(contextName, namespace, deployment)
+	case "delete":
+		out, err = portforward.DeleteDeployment(contextName, namespace, deployment)
+	default:
+		writeError(w, http.StatusBadRequest, "unknown action: "+action)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, k8sActionDTO{Output: out})
 }
 
 // ── Wiring helpers ──────────────────────────────────────────────────────────

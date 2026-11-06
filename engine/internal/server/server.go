@@ -114,6 +114,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/k8s/contexts", s.handleK8sContexts)
 	s.mux.HandleFunc("GET /api/k8s/namespaces", s.handleK8sNamespaces)
 	s.mux.HandleFunc("GET /api/k8s/services", s.handleK8sServices)
+	s.mux.HandleFunc("GET /api/k8s/deployments", s.handleK8sDeployments)
+	s.mux.HandleFunc("POST /api/k8s/deployments/{action}", s.handleK8sDeploymentAction)
 
 	s.mux.HandleFunc("GET /api/hub/catalog", s.handleCatalog)
 	s.mux.HandleFunc("GET /api/hub/tags", s.handleHubTags)

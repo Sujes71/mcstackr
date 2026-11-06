@@ -13,6 +13,7 @@ struct MainContentView: View {
     @State private var editingService: ServiceStatus?
     @State private var showAddPortForward = false
     @State private var editingForward: PortForwardInfo?
+    @State private var showK8sManager = false
 
     /// Every delete in the app confirms through the same window.
     private enum DeleteTarget: Identifiable {
@@ -50,7 +51,11 @@ struct MainContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(showAddService: $showAddService, showAddPortForward: $showAddPortForward)
+            HeaderView(
+                showAddService: $showAddService,
+                showAddPortForward: $showAddPortForward,
+                showK8sManager: $showK8sManager
+            )
             Divider().overlay(Theme.stroke)
             content
                 .overlay(alignment: .top) {
@@ -98,6 +103,10 @@ struct MainContentView: View {
         }
         .sheet(item: $editingForward) { forward in
             PortForwardEditorView(forward: forward)
+                .environmentObject(state)
+        }
+        .sheet(isPresented: $showK8sManager) {
+            K8sManagerView()
                 .environmentObject(state)
         }
         .sheet(item: $deleteTarget) { target in
@@ -221,6 +230,7 @@ private struct HeaderView: View {
     @EnvironmentObject private var state: AppState
     @Binding var showAddService: Bool
     @Binding var showAddPortForward: Bool
+    @Binding var showK8sManager: Bool
 
     private var isDocker: Bool { state.section == .docker }
 
@@ -343,6 +353,10 @@ private struct HeaderView: View {
                         Task { await state.startAllPortForwards() }
                     }
                 }
+            }
+
+            ActionIconButton(systemName: "square.stack.3d.down.forward", tint: Theme.info, help: "Manage the Kubernetes deployments") {
+                showK8sManager = true
             }
 
             ActionIconButton(systemName: "plus", tint: Theme.accent, help: "Add port-forward") {
