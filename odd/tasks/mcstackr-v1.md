@@ -235,6 +235,31 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   profile stops them.
 - **S38** — AWS/EKS is not exercised without the VPN. Port-forward verification
   uses a fake `kubectl`; local processes are verified locally.
+- **S65** — Git operations live in their own section of the sidebar, right
+  below Requests, and they work on the directory the app was launched from,
+  the same directory the original runtime used when it was launched. The
+  section shows the current branch, how far it is ahead or behind its
+  tracking branch, and the repository root. The files are listed with their
+  status, staged ones first and the unstaged ones after, and the selected
+  file shows its diff. Every operation the original runtime offers is there:
+  stage, stage all, unstage, unstage all, commit, amend, discard, create
+  branch, checkout, merge, delete branch, push, pull, stash, pop, log, the
+  detail of a commit with its files and their diff, the conflicts of a rebase
+  or a merge with ours and theirs, and cherry-pick. The actions at the bottom
+  change with the state, like in the original: push when there are commits to
+  send, pull when the tree is clean, stash when there are changes, pop when
+  there is a stash.
+- **S66** — The diff is coloured the same way the original runtime coloured
+  it: the added lines in green, the removed ones in red, the hunks in cyan
+  and the file headers in grey. A diff in a single flat colour is not
+  acceptable.
+- **S67** — The git operations that destroy something ask first with the
+  app's standard confirmation window, the same way the rest of the app
+  deletes: discarding the changes of a file, merging a branch and deleting a
+  branch. The merge and delete confirmations live in the branch sheet that
+  opened them, and the detail of a commit lives in the log sheet that opened
+  it, because a view cannot present two sheets at the same time.
+
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
 MockServer, request collections, git operations.
@@ -300,6 +325,13 @@ MockServer, request collections, git operations.
 - [x] T41 — Swift: sidebar badges are running-only (services + local processes, forwards) and the `SOON` label is removed. Evidence: `swift build` passes.
 - [ ] T10 — Manual UI smoke test on a real desktop session (user to confirm layout and interactions).
 - [ ] T11 — Next slice: Kubernetes port-forward and resource manager.
+
+- [x] T75 — Git operations: engine endpoints (`GET /gitops`, `POST /gitops/run`)
+  over the copied `internal/git` package, plus the Git section of the app with
+  the two panels, the commit, branch, log and conflict sheets. Evidence: 44/44
+  engine checks against a scratch repository, and every flow driven in the app
+  (stage, commit, discard, checkout, merge, delete branch, log, detail,
+  stash, pop, push, conflicts, ours, continue merge).
 
 ## Log
 
@@ -455,3 +487,46 @@ MockServer, request collections, git operations.
   is editable afterwards (same as the TUI). Local processes stay read-only in
   this slice; they belong to the Docker/local-process work. Divergence: the
   original has no "open in browser" action, so none was added.
+
+- **L56 (request):** "sale a git ops recuerda construirlo con el mismo concepto
+  que el original y las mismas funcionalidades exactas miralo bien y no
+  tropees"
+- **L57 (request):** "git operations no iria ahi iria debajo de requests"
+- **L58 (request):** "en el original creo que aparecia con colores de rojo lo
+  que quitas o cambias verde lo que no no se si me epxlico,todo blanco asi
+  queda muy feo. Prueba que todas las funcionalidades funcionan antes de hacer
+  nada perdona el qeu te jodio laprueba fui yo. Haz lo qeu te dije y prueba
+  todas las funcionalidades tiene qeu funciona todo si o si"
+- **L59 (decision):** git operations became a section of the sidebar below
+  Requests, not an entry of the workspace menu, because the git view is a
+  screen of the workspace in the original runtime and not a modal. It works on
+  the directory the app was launched from, exactly like the original console
+  worked on the directory it was launched from; the section says so when that
+  directory is not a repository.
+- **L60 (evidence):** the engine operations were verified with 44 checks
+  against a scratch repository with a bare remote: stage, stage all, unstage,
+  unstage all, diff, diff of a new file, commit, amend, discard, create
+  branch, checkout, merge, delete branch, push, pull, stash, pop, log of a
+  branch, files of a commit, diff of a file of a commit, a merge conflict with
+  ours and continue, a rebase conflict with theirs and abort, cherry-pick, and
+  an unknown operation. Every flow was then driven in the app with real mouse
+  events: the section loads the repository, the diff appears when a file is
+  selected, staging moves the file to the staged group, the commit sheet
+  commits, the discard asks and reverts, the branch sheet checks out, the
+  merge asks and creates a merge commit, the delete asks and removes the
+  branch, the log opens the detail with its files and diff, the stash and the
+  pop move the changes, the push reaches the remote, and the conflict sheet
+  resolves with ours and continues the merge.
+- **L61 (bug):** three real defects came out of that verification. A nil
+  slice in the engine was marshalled as `null` and the app could not decode
+  the state, so the file list is always built as an empty slice first. The
+  parameters of an operation were decoded as strings only, so a number broke
+  the whole request; they are read as text whatever their type. And a SwiftUI
+  view cannot present two sheets at once, so the confirmation of a merge or a
+  delete was lost when it came from the branch sheet: those confirmations now
+  live in the sheet that opened them, and the detail of a commit lives in the
+  log sheet.
+- **L62 (evidence):** the colours of the diff were proved by rendering the
+  same attributed string to an image and reading the pixels: the added lines
+  are green, the removed ones red, the hunks cyan and the file headers grey.
+  The colour of a diff in a single flat tone is not acceptable.

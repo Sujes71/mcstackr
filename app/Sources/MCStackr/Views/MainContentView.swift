@@ -123,6 +123,8 @@ struct MainContentView: View {
             )
         } else if state.section == .requests {
             RequestOpsView()
+        } else if state.section == .git {
+            GitOpsView()
         } else {
             dockerContent
         }
@@ -261,6 +263,8 @@ private struct HeaderView: View {
                     portForwardActions
                 case .requests:
                     requestActions
+                case .git:
+                    EmptyView()
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -364,6 +368,12 @@ private struct HeaderView: View {
             return "\(forwards) port-forwards · \(running) running"
         case .requests:
             var parts = ["request collections"]
+            if let description = profile.description, !description.isEmpty {
+                parts.insert(description, at: 0)
+            }
+            return parts.joined(separator: " · ")
+        case .git:
+            var parts = ["the repository of the directory the app was launched from"]
             if let description = profile.description, !description.isEmpty {
                 parts.insert(description, at: 0)
             }

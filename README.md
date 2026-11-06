@@ -16,6 +16,11 @@ two sections:
 - **Port Forwards** — every other environment (`dev`, `staging`, …): Kubernetes
   port-forwards and cloud workloads. Forwards are discovered from kubeconfig and
   managed with kubectl.
+- **Requests** — request collections per environment: folders, requests,
+  variables and the run history.
+- **Git** — the repository of the directory the app was launched from: the
+  staged and unstaged files with their diff, commits, branches, stashes and the
+  conflicts of a rebase or a merge.
 
 ## Architecture
 
@@ -80,6 +85,8 @@ All routes require `Authorization: Bearer <token>`.
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
+| GET | `/api/profiles/{p}/gitops` | state of the repository: branch, files, branches, commits, conflicts |
+| POST | `/api/profiles/{p}/gitops/run` | run a git operation (`stage`, `commit`, `merge`, `push`, `stash`, …) |
 | GET | `/api/profiles/{p}/requests` | request environments, folders and requests |
 | POST | `/api/profiles/{p}/requests/run` | run a request (`env`, `request`, `variables`) |
 | POST | `/api/profiles/{p}/requests/folders` | add a base URL folder (`name`, `url`, `env`) |

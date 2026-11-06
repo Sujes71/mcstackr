@@ -62,6 +62,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services", s.handleAddService)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/envs/{env}/services/{service}", s.handleDeleteService)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/actions/{action}", s.handleServiceAction)
+	s.mux.HandleFunc("GET /api/profiles/{profile}/gitops", s.handleGitOps)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/gitops/run", s.handleGitOpRun)
 	s.mux.HandleFunc("GET /api/profiles/{profile}/requests", s.handleRequests)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/requests/run", s.handleRunRequest)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/requests/run", s.handleCancelRequest)

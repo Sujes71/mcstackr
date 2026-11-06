@@ -990,6 +990,35 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Git operations
+
+    /// The state of the repository the app was launched from.
+    func fetchGitState() async -> GitState? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/gitops"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Runs one git operation and returns its output.
+    func runGitOp(op: String, params: [String: String] = [:]) async -> GitOpResult? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/gitops/run",
+                body: GitOpPayload(op: op, params: params)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     // MARK: - Queue operations
 
     func fetchQueueOps(service: String) async -> QueueOpsInfo? {

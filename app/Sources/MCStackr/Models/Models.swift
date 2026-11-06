@@ -354,6 +354,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case docker
     case portForward
     case requests
+    case git
 
     var id: String { rawValue }
 
@@ -362,6 +363,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .docker: return "Docker"
         case .portForward: return "Port Forwards"
         case .requests: return "Requests"
+        case .git: return "Git"
         }
     }
 
@@ -370,6 +372,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .docker: return "shippingbox.fill"
         case .portForward: return "arrow.left.arrow.right"
         case .requests: return "list.bullet.rectangle"
+        case .git: return "arrow.triangle.branch"
         }
     }
 }
@@ -601,4 +604,80 @@ struct MockRunPayload: Encodable {
 struct MockRunResult: Codable {
     let output: String
     var finishedAt: String?
+}
+
+// MARK: - Git operations
+
+struct GitFile: Codable, Identifiable, Hashable {
+    let path: String
+    let statusCode: String
+    let indexCode: String
+    let staged: Bool
+
+    var id: String { "\(path)-\(staged)" }
+
+    /// The letter the original runtime shows next to the file.
+    var marker: String {
+        let code = statusCode.isEmpty ? " " : statusCode
+        return code == " " ? (indexCode.isEmpty ? " " : indexCode) : code
+    }
+}
+
+struct GitBranch: Codable, Identifiable, Hashable {
+    let name: String
+    let current: Bool
+    let tracking: String
+    let ahead: Int
+    let behind: Int
+    let lastCommit: String
+
+    var id: String { name }
+}
+
+struct GitStash: Codable, Identifiable, Hashable {
+    let ref: String
+    let message: String
+
+    var id: String { ref }
+}
+
+struct GitCommit: Codable, Identifiable, Hashable {
+    let hash: String
+    let author: String
+    let date: String
+    let message: String
+
+    var id: String { hash }
+}
+
+struct GitState: Codable {
+    let profile: String
+    let isRepo: Bool
+    let gitFound: Bool
+    let root: String
+    let branch: String
+    let tracking: String
+    let ahead: Int
+    let behind: Int
+    let files: [GitFile]
+    let stagedStart: Int
+    let lastCommit: String
+    let headPushed: Bool
+    let hasUnpushed: Bool
+    let hasStash: Bool
+    let stashes: [GitStash]
+    let branches: [GitBranch]
+    let commits: [GitCommit]
+    let rebaseInProgress: Bool
+    let mergeInProgress: Bool
+    let conflicts: [String]
+}
+
+struct GitOpPayload: Encodable {
+    let op: String
+    let params: [String: String]
+}
+
+struct GitOpResult: Codable {
+    let output: String
 }
