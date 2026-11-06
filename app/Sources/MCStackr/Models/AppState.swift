@@ -541,6 +541,41 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Reports the result of an action of the Kubernetes manager with the
+    /// notice of the app.
+    ///
+    /// The manager shows the result inside its window, but the window can be
+    /// closed while the action is still running: the notice is what survives
+    /// it, and it is the same one every other operation of the app uses.
+    func reportK8sOperation(
+        action: String,
+        namespace: String,
+        deployment: String,
+        detail: String,
+        succeeded: Bool
+    ) {
+        dbNotice = DBJobNotice(
+            id: "k8s-\(action)-\(deployment)-\(Date().timeIntervalSince1970)",
+            service: namespace,
+            label: k8sActionLabel(action),
+            syncEnv: deployment,
+            succeeded: succeeded,
+            detail: detail,
+            finishedAt: isoNow(),
+            seconds: 5
+        )
+    }
+
+    /// The name of an action of the manager, as the notice shows it.
+    private func k8sActionLabel(_ action: String) -> String {
+        switch action {
+        case "restart": return "Restart"
+        case "scale": return "Scale"
+        case "delete": return "Delete"
+        default: return action
+        }
+    }
+
     /// The live logs of a deployment.
     ///
     /// The stream follows the deployment: the last lines come first and the
@@ -1198,8 +1233,7 @@ final class AppState: ObservableObject {
     /// of the app uses, so the git section shows it the same way the rest of
     /// the app does. The notice lives five seconds, like the message of the
     /// console runtime.
-    func reportGitOperation(op: String, detail: String, succeeded: Bool) {
-        let root = gitState?.root ?? ""
+    func reportGitOperation(op: String, detail: String, succeeded: Bool) {        let root = gitState?.root ?? ""
         let repository = root.split(separator: "/").last.map(String.init) ?? "Git"
         dbNotice = DBJobNotice(
             id: "git-\(op)-\(Date().timeIntervalSince1970)",

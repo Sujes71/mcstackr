@@ -698,7 +698,7 @@ struct K8sManagerView: View {
 
         // The output of these actions is the answer of kubectl: the manager
         // shows the label of the action instead of it.
-        let (_, error) = await state.runK8sDeploymentAction(
+        let (output, error) = await state.runK8sDeploymentAction(
             action.rawValue,
             context: selectedContext,
             namespace: selectedNamespace,
@@ -706,6 +706,17 @@ struct K8sManagerView: View {
             replicas: replicas
         )
         guard !Task.isCancelled else { return }
+
+        // The result goes to the notice of the app as well: the manager can
+        // be closed while the action is still running, and the notice is
+        // what survives it.
+        state.reportK8sOperation(
+            action: action.rawValue,
+            namespace: selectedNamespace,
+            deployment: deployment.name,
+            detail: error ?? output ?? "",
+            succeeded: error == nil
+        )
 
         if let error {
             feedback = Feedback(succeeded: false, text: error)

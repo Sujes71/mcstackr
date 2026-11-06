@@ -322,6 +322,11 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
 - **S78** — Without a workspace the app is empty: the sidebar shows no
   section and no state, and the header of the window shows no section
   either. There is nothing to navigate to.
+- **S80** — The result of an operation of the app is reported with the
+  notice of the app, so it survives the window that started it: the user can
+  close the window while the operation runs and still see what happened.
+  Every operation of the app follows it: the git operations, the background
+  operations of the database and the actions of the Kubernetes manager.
 - **S79** — A Kubernetes environment belongs to a context. The window that
   adds a port-forward asks for the context only when the environment has no
   forwards yet: after the first one, the environment knows its context and
@@ -508,6 +513,13 @@ MockServer, request collections, git operations.
   and in "CONTEXT" for one that has none; without a workspace the only
   button of the app is "New workspace", with no section, no state in the
   footer of the sidebar and no title nor actions in the header.
+- [x] T85 — The result of an action of the Kubernetes manager survives the
+  window that started it. Evidence: driven in the app over the accessibility
+  tree with a kubectl that fails after three seconds, the restart is asked,
+  the window is closed immediately and the notice of the app appears at the
+  top of the section with the standard format ("Restart failed | 06/11 12:06
+  | d4i | batch | error: deployments.apps \"batch\" is forbidden: exceeded
+  quota"); six seconds later it is gone, because it lives five.
 - [x] T82 — Every output of the app is drawn with the format of the log: the
   notice of the last operation, the output of a DB, queue and mock
   operation, and the last error of a port-forward. The shared block carries
@@ -890,6 +902,15 @@ MockServer, request collections, git operations.
   se saltará la ventana de context puesto que se inretperta que ese entorno
   esta asociado a ese context me explico? luego cuando no hay ningun
   workspace arreglaste lo que te dije?"
+- **L96 (request, verbatim):** "no hay ocurrido ningun error ni alerta pero
+  en caso de que hubiera las estandarizaste con las demas ventanas
+  miaginate que le doy a rollout y cierro la ventana y falla que ocurre?
+  sale la alerta de 5 segundso arriba con el formato d esiempre?"
+- **L97 (decision):** the actions of the Kubernetes manager report their
+  result with the notice of the app as well as inside their window: the
+  window can be closed while the action runs, and the notice is what
+  survives it. It was the only operation of the app that kept the failure
+  in the window and lost it when the window went away.
 - **L95 (decision):** the window that adds a port-forward asks for the
   context only when the environment has no forwards yet: the environment
   belongs to a context, and after the first forward the window goes straight
