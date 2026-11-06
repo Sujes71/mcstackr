@@ -367,6 +367,425 @@ struct AddPortForwardView: View {
     }
 }
 
+// MARK: - Kubernetes section
+
+/// The Kubernetes section of the app.
+///
+/// It is organised by environment: the environment in use is at the top and
+/// the port forwards of that environment are below it. A new environment
+/// starts empty, so the way to add a port-forward belongs to the section.
+struct PortForwardView: View {
+    @EnvironmentObject private var state: AppState
+    let onAdd: () -> Void
+    let onEdit: (PortForwardInfo) -> Void
+    let onDelete: (PortForwardInfo) -> Void
+    let onOpenK8s: (PortForwardInfo) -> Void
+
+    /// The environment in use.
+    private var environmentName: String { state.portForwardEnvironment?.name ?? "" }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if state.k8sEnvironments.isEmpty {
+                    K8sEnvironmentsEmptyView()
+                } else {
+                    envSelector
+
+                    if let detail = state.environmentDetail {
+                        if detail.portForwards.isEmpty {
+                            PortForwardEmptyView(onAdd: onAdd)
+                        } else {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("PORT-FORWARDS")
+                                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                                    .tracking(1.1)
+                                    .foregroundStyle(Theme.textDim)
+
+                                ForEach(detail.portForwards) { forward in
+                                    PortForwardRow(
+                                        forward: forward,
+                                        isBusy: state.runningAction != nil,
+                                        onToggle: {
+                                            if forward.isRunning || forward.isBusy {
+                                                Task { await state.stopPortForward(forward) }
+                                            } else {
+                                                Task { await state.startPortForward(forward) }
+                                            }
+                                        },
+                                        onOpen: { onEdit(forward) },
+                                        onOpenK8s: { onOpenK8s(forward) },
+                                        onDelete: { onDelete(forward) }
+                                    )
+                                }
+                            }
+
+                            addForwardRow
+                        }
+                    } else {
+                        VStack(spacing: 14) {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(Theme.accent)
+                            Text("Loading port-forward environment…")
+                                .font(.system(size: 12, design: .rounded))
+                                .foregroundStyle(Theme.textDim)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                    }
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.hidden)
+        .onAppear {
+            Task { await state.refreshEnvironmentDetail() }
+        }
+    }
+
+    // MARK: Pieces
+
+    /// The Kubernetes environment in use. It is the context of everything
+    /// below it: the same look as the request environment selector and the
+    /// same width, so changing the environment moves nothing.
+    private var envSelector: some View {
+        Menu {
+            ForEach(state.k8sEnvironments) { env in
+                Button {
+                    state.selectK8sEnvironment(env.name)
+                } label: {
+                    if env.name == environmentName {
+                        Label(env.name, systemImage: "checkmark")
+                    } else {
+                        Text(env.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 11) {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(Theme.violet.opacity(0.18))
+                    .frame(width: 34, height: 34)
+                    .overlay {
+                        Image(systemName: "square.stack.3d.down.forward")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.violet)
+                    }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(environmentName.isEmpty ? "No environment" : environmentName)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text("KUBERNETES ENVIRONMENT")
+                        .font(.system(size: 8, weight: .bold, design: .rounded))
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.textDim)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Theme.textDim)
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 10)
+            // The same width whatever the name is, so changing the
+            // environment does not move anything.
+            .frame(width: 240, alignment: .leading)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Theme.stroke, lineWidth: 1)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .padding(.bottom, 6)
+    }
+
+    /// Adding a port-forward belongs to the environment, so the affordance
+    /// sits with the forwards of the environment in use.
+    private var addForwardRow: some View {
+        ActionTextButton(title: "Add port-forward", systemName: "plus") {
+            onAdd()
+        }
+    }
+}
+
+/// The workspace has no Kubernetes environment yet. The header creates them.
+private struct K8sEnvironmentsEmptyView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "square.stack.3d.down.forward")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Theme.textDim)
+
+            Text("No Kubernetes environment")
+                .font(Theme.title(18))
+                .foregroundStyle(Theme.text)
+
+            Text("Use the + button of the header to create one. It starts empty and holds the port forwards.")
+                .font(.system(size: 12, design: .rounded))
+                .foregroundStyle(Theme.textMuted)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 70)
+    }
+}
+
+/// The environment in use has no port forwards yet.
+private struct PortForwardEmptyView: View {
+    let onAdd: () -> Void
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Theme.textDim)
+
+            Text("No port forwards yet")
+                .font(Theme.title(18))
+                .foregroundStyle(Theme.text)
+
+            Text("Discover a Kubernetes service and forward one of its ports to localhost.")
+                .font(.system(size: 12, design: .rounded))
+                .foregroundStyle(Theme.textMuted)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+
+            ActionTextButton(title: "Add port-forward", systemName: "plus", prominent: true) {
+                onAdd()
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 70)
+    }
+}
+
+private struct PortForwardRow: View {
+    let forward: PortForwardInfo
+    let isBusy: Bool
+    let onToggle: () -> Void
+    let onOpen: () -> Void
+    let onOpenK8s: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            StatusDot(state: forward.state)
+
+            Image(systemName: "network")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.info)
+                .frame(width: 28, height: 28)
+                .background(Theme.info.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(forward.name)
+                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.text)
+                Text("\(forward.k8sContext) · \(forward.k8sNamespace)/\(forward.k8sService)")
+                    .font(Theme.monoSmall)
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+                if let error = forward.error, !error.isEmpty {
+                    Text(error)
+                        .font(Theme.monoSmall)
+                        .foregroundStyle(Theme.danger)
+                        .lineLimit(2)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Text("\(forward.localPort) → \(forward.remotePort)")
+                .font(Theme.mono)
+                .foregroundStyle(Theme.textMuted)
+
+            // The deployments of the namespace of the forward live one level
+            // down, next to the button that runs the forward.
+            ActionIconButton(
+                systemName: "square.stack.3d.down.forward",
+                tint: Theme.violet,
+                help: "Open the Kubernetes operations of the namespace"
+            ) {
+                onOpenK8s()
+            }
+
+            ActionIconButton(
+                systemName: forward.isRunning || forward.isBusy ? "stop.fill" : "play.fill",
+                tint: forward.isRunning || forward.isBusy ? Theme.warning : Theme.running,
+                help: forward.isRunning || forward.isBusy ? "Stop" : "Start"
+            ) {
+                onToggle()
+            }
+            .disabled(isBusy)
+        }
+        .padding(13)
+        .cardStyle()
+        .contentShape(Rectangle())
+        .onTapGesture { onOpen() }
+        .contextMenu {
+            Button(forward.isRunning || forward.isBusy ? "Stop" : "Start") { onToggle() }
+            Button("Edit local port…") { onOpen() }
+            Button("Kubernetes operations…") { onOpenK8s() }
+            Divider()
+            Button("Delete port-forward…", role: .destructive) { onDelete() }
+        }
+    }
+}
+
+// MARK: - Add Kubernetes environment
+
+/// The window that creates a Kubernetes environment. The environment starts
+/// empty: the port forwards are added inside it, from the section.
+struct AddK8sEnvironmentView: View {
+    @EnvironmentObject private var state: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    /// The characters the engine accepts in the name of an environment.
+    private static let allowedNameCharacters = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
+
+    @State private var name = ""
+    @State private var isSaving = false
+    @State private var localError: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider().overlay(Theme.stroke)
+            content
+            Divider().overlay(Theme.stroke)
+            footer
+        }
+        .frame(width: 460, height: 320)
+        .background(Theme.background)
+    }
+
+    // MARK: Chrome
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Add environment")
+                    .font(Theme.display(22))
+                    .foregroundStyle(Theme.text)
+                Text("\(state.workspaceName) · a Kubernetes environment holds the port forwards.")
+                    .font(.system(size: 11.5, design: .rounded))
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            ActionIconButton(systemName: "xmark", tint: Theme.danger, help: "Close") {
+                dismiss()
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 18)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let localError {
+                banner(localError, color: Theme.danger)
+            }
+
+            FormSection("Environment") {
+                VStack(alignment: .leading, spacing: 6) {
+                    FieldLabel(text: "Name")
+                    ThemedTextField(placeholder: "staging", text: $name)
+                    Text("Letters, numbers, _, . and -.")
+                        .font(.system(size: 10.5, design: .rounded))
+                        .foregroundStyle(Theme.textDim)
+                    if !name.isEmpty && !nameIsValid {
+                        Text("The name accepts only letters, numbers, _, . and -.")
+                            .font(.system(size: 10.5, design: .rounded))
+                            .foregroundStyle(Theme.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Text("The environment starts empty.")
+                .font(.system(size: 10, design: .rounded))
+                .foregroundStyle(Theme.textDim)
+
+            Spacer()
+
+            ActionTextButton(
+                title: isSaving ? "Creating…" : "Create",
+                systemName: "plus",
+                prominent: true
+            ) {
+                Task { await save() }
+            }
+            .disabled(isSaving || !nameIsValid)
+            .opacity(isSaving || !nameIsValid ? 0.5 : 1)
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 14)
+    }
+
+    // MARK: Pieces
+
+    private func banner(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: 11, design: .rounded))
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    // MARK: State
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The engine refuses an empty name and any name with a character that
+    /// is not a letter, a number, `_`, `.` or `-`.
+    private var nameIsValid: Bool {
+        guard !trimmedName.isEmpty else { return false }
+        return trimmedName.allSatisfy { Self.allowedNameCharacters.contains($0) }
+    }
+
+    // MARK: Logic
+
+    private func save() async {
+        localError = nil
+        isSaving = true
+        defer { isSaving = false }
+
+        let created = await state.createK8sEnvironment(name: trimmedName)
+        if created {
+            dismiss()
+        } else {
+            // The engine refused it: the window stays open and shows why.
+            localError = state.errorMessage ?? "Could not create the environment."
+            state.errorMessage = nil
+        }
+    }
+}
+
 // MARK: - Edit port-forward
 
 struct PortForwardEditorView: View {

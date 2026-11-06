@@ -290,12 +290,23 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   is how long the message of the console runtime stays.
 - **S73** — The app manages the deployments of a Kubernetes namespace the
   way the console runtime did: the list of the deployments with their state,
-  and the actions restart, scale, logs, describe and delete. The shell of
-  the console runtime is not one of them: an app cannot hand its terminal
-  over to kubectl. The manager is a window of the Port Forwards section,
-  and it asks the cluster again every three seconds, like the console
-  runtime did. A destructive action asks first, with the window the app
-  uses for every destructive action.
+  and the actions restart, scale, logs and delete. The shell of the console
+  runtime is not one of them: an app cannot hand its terminal over to
+  kubectl, and neither is the description of a deployment. The manager is a
+  window of the Kubernetes section, and it asks the cluster again every
+  three seconds, like the console runtime did. A destructive action asks
+  first, with the window the app uses for every destructive action.
+- **S74** — The Kubernetes section is organised by environment. The "+" of
+  the header creates one, it starts empty, and the port forwards are added
+  inside it. The environments of the workspace that are not the docker one
+  are the Kubernetes ones, and the section moves between them the way the
+  Request section moves between its request environments. A new workspace has
+  no Kubernetes environment at all until the user creates one.
+- **S75** — The logs of a deployment are live and well formatted: they
+  arrive while the window is open, every line is a row of its own with its
+  timestamp and its level coloured, and the scroll follows the stream
+  without jumping. The logs of a container are shown the same way.
+- **S76** — The sections are named Docker, Kubernetes, Request and Git.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -412,6 +423,34 @@ MockServer, request collections, git operations.
   the replicas with three as the current count and four as the answer, the
   output of logs and of describe shows in the result window, and the delete
   asks first with the window of the app and ends in "Deployment deleted".
+- [x] T79 — The logs of a deployment are live: the engine streams them with
+  the same frames the logs of a service use (`GET
+  /api/k8s/deployments/{deployment}/logs`), the manager opens a window that
+  follows the deployment, and the log is one row per line with the prefix of
+  the service, the timestamp and the level in their own colour. The window
+  of the logs of a container uses the same view, so the log stops looking
+  like one block of text that jumps on every line. The description of a
+  deployment and the action that read the last hundred lines are gone: the
+  first is not wanted and the second is what the live window replaces.
+  Evidence: driven in the app over the accessibility tree with a kubectl that
+  answers with canned data, the window of the logs opens with the indicator
+  in "streaming", the lines arrive one by one (three at the first second,
+  the fourth three seconds later) and the timestamp and the level of each
+  line are separate elements of the tree.
+- [x] T80 — The Kubernetes section is organised by environment: the "+" of
+  the header creates one, the section moves between them with a selector
+  like the one of the Request section, the port forwards are added inside
+  the environment, and every row of a forward has a button next to the play
+  that opens the manager of the deployments of its namespace. The section is
+  named Kubernetes and the Request section is named Request; a new workspace
+  has no Kubernetes environment until the user creates one. Evidence: driven
+  in the app over the accessibility tree with a config of its own, the
+  header shows "demo workspace · staging · 1 port-forwards", the button of
+  the row opens the manager already in the deployments of the namespace of
+  the forward, the "+" opens the window of a new environment, the name
+  written there creates it, and the section shows it in use with
+  "0 port-forwards" and the empty state that invites to add one; the config
+  keeps the new environment with nothing inside it.
 
 ## Log
 - **L1 (user request, verbatim):**
@@ -727,3 +766,34 @@ MockServer, request collections, git operations.
   instead of a stream that only the terminal could show. The manager opens
   from the header of the Port Forwards section, which is where Kubernetes
   lives in the app.
+- **L85 (request, verbatim):** "vale un par de cosas que me descuadran. 1-
+  view the last 100 lines es estipido eso deberia permitirte ver los logs bien
+  formteados en tiempo real que se ven como amontonados y con saltos raros.
+  2- full deployment descriptino fuera, 3- el + de arriba deberia permitirte
+  añadir entornos y por defecto no habria ningun entorno ni nada o sea vacio
+  cuando creo un entorno entonces ya en ses entorno puedo añadir deforwards,
+  obviamnete el sistmea de como nos movemos entre entornos puedes basarlos
+  en otros uqe tenemos dentro del propio proyecto como requests, luego en un
+  nivel abajo ya me tienes que djear añadir un forward y el tema de
+  kubernetes como funciona ahora solo que en la fila del forward tambien me
+  tienes que dejar un boton añ lado del play a la izquierda por si quiero
+  desde ahi acceder al pod para hacer alguna operacion de kubernetes. tambien
+  renombraria la seccion a Kubernetes en vez de port forwards y requests a
+  Request."
+- **L86 (decision):** the logs of a deployment are live now and formatted
+  line by line, and the description of a deployment is gone. The log of a
+  container was rendered as one single text that re-laid out on every line,
+  which is what made it look crammed and jumpy: both logs use the same view
+  now, one row per line with the timestamp and the level in their own
+  colour. The Kubernetes section is organised by environment: the "+" of the
+  header creates one, it starts empty, the port forwards are added inside
+  it, and the section moves between the environments the way the Request
+  section moves between its request environments. Every row of a forward has
+  a button next to the play that opens the manager of the deployments of its
+  namespace. The sections are named Docker, Kubernetes, Request and Git, and
+  a new workspace has no Kubernetes environment until the user creates one.
+- **L87 (discovery):** the log of the console runtime was never shown: it
+  streamed to the terminal with `tea.ExecProcess` and the window of the
+  runtime ended up empty. The app can do what the terminal did, and the
+  engine streams the logs of a deployment with the same frames the logs of
+  a service use.

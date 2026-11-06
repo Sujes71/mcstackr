@@ -95,6 +95,11 @@ struct CreateProfileRequest: Encodable {
     let environments: [String]
 }
 
+/// The body of a new environment of a workspace.
+struct CreateEnvironmentRequest: Encodable {
+    let name: String
+}
+
 struct PortConfig: Codable, Hashable {
     var host: String
     var container: String
@@ -435,8 +440,8 @@ enum AppSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .docker: return "Docker"
-        case .portForward: return "Port Forwards"
-        case .requests: return "Requests"
+        case .portForward: return "Kubernetes"
+        case .requests: return "Request"
         case .git: return "Git"
         }
     }

@@ -13,10 +13,12 @@ two sections:
 - **Docker** — the environment named `local`: compose services, live status,
   logs and lifecycle actions, plus host commands (`local_processes`) that run
   on your Mac.
-- **Port Forwards** — every other environment (`dev`, `staging`, …): Kubernetes
-  port-forwards and cloud workloads. Forwards are discovered from kubeconfig and
-  managed with kubectl.
-- **Requests** — request collections per environment: folders, requests,
+- **Kubernetes** — the environments of the workspace that are not the docker
+  one: the port-forwards of each of them, discovered from kubeconfig and
+  managed with kubectl, and the deployments of a namespace, with the actions
+  restart, scale, live logs and delete. The environments are created from the
+  section and they start empty.
+- **Request** — request collections per environment: folders, requests,
   variables and the run history.
 - **Git** — the repository of the directory the app was launched from: the
   staged and unstaged files with their diff, commits, branches, stashes and the
@@ -75,6 +77,7 @@ All routes require `Authorization: Bearer <token>`.
 | POST | `/api/profiles` | create a profile (workspace) |
 | DELETE | `/api/profiles/{p}` | delete a profile (best-effort container stop) |
 | POST | `/api/profiles/{p}/envs` | add an environment |
+| POST | `/api/profiles/{p}/envs` | add an environment to the workspace (`name`) |
 | GET | `/api/profiles/{p}/envs/{e}` | environment detail (port-forwards, processes) |
 | GET | `/api/profiles/{p}/envs/{e}/status` | merged config + container status |
 | GET | `/api/profiles/{p}/envs/{e}/compose` | generated compose YAML |
@@ -85,6 +88,9 @@ All routes require `Authorization: Bearer <token>`.
 | PATCH | `/api/profiles/{p}/envs/{e}/services/{s}` | update a service and regenerate compose |
 | DELETE | `/api/profiles/{p}/envs/{e}/services/{s}` | remove a service |
 | POST | `/api/profiles/{p}/envs/{e}/services/{s}/actions/{up,stop,down,restart}` | service lifecycle |
+| GET | `/api/k8s/deployments` | deployments of a namespace (`context`, `namespace`) |
+| POST | `/api/k8s/deployments/{restart,scale,delete}` | run an action over a deployment (`context`, `namespace`, `deployment`, `replicas`) |
+| GET | `/api/k8s/deployments/{d}/logs` | SSE log stream of a deployment (`context`, `namespace`, `lines`) |
 | GET | `/api/profiles/{p}/gitops` | state of the repository: branch, files, branches, commits, conflicts |
 | POST | `/api/profiles/{p}/gitops/run` | run a git operation (`stage`, `commit`, `merge`, `push`, `stash`, …) |
 | GET | `/api/profiles/{p}/requests` | request environments, folders and requests |
@@ -129,14 +135,15 @@ All routes require `Authorization: Bearer <token>`.
 
 ## Scope of this slice
 
-Implemented: workspace switcher (create/settings/delete), Docker and Port Forwards sections, Docker
+Implemented: workspace switcher (create/settings/delete), Docker and Kubernetes sections, Docker
 service status, lifecycle actions, live logs, curated catalog + Docker Hub
 search, add/edit/remove services with prefilled editable defaults (ports, env
-vars, volumes), port-forward discovery + CRUD + start/stop with live state,
+vars, volumes), port-forward discovery + CRUD + start/stop with live state, Kubernetes
+environments per workspace + the deployment manager (restart, scale, live
+logs, delete),
 local-process management (start/stop/add/delete, orphan recovery), DB
 operations (sync-environment wizard, schema/data export and import, truncate)
 as background jobs (tool images pulled on demand), shared config, engine
 lifecycle.
 
-Next slices: Kubernetes resource manager (deployments), queues, MockServer, git
-operations.
+Next slices: queues, MockServer.

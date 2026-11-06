@@ -29,6 +29,9 @@ final class AppState: ObservableObject {
     @Published private(set) var catalog: [CatalogEntry] = []
 
     @Published var section: AppSection = .docker
+    /// The Kubernetes environment in use. It is one of the environments of
+    /// the workspace that are not the docker one.
+    @Published var selectedK8sEnvName: String = ""
     /// An action the header asked the current section to run.
     @Published var pendingSectionAction: SectionAction?
     /// The requests that are running right now, with the task that follows
@@ -110,10 +113,22 @@ final class AppState: ObservableObject {
             ?? profile.environments.first
     }
 
-    /// Every environment that is not `local` is a port-forward (Kubernetes) environment.
+    /// The environments of the workspace that are not the docker one: the
+    /// Kubernetes ones. A new one starts empty, and the port forwards are
+    /// added inside it.
+    var k8sEnvironments: [ProfileEnvironment] {
+        guard let profile = selectedProfile else { return [] }
+        return profile.environments.filter { $0.name != "local" }
+    }
+
+    /// The Kubernetes environment in use: the one the user picked, or the
+    /// first one when there is none picked yet.
     var portForwardEnvironment: ProfileEnvironment? {
-        guard let profile = selectedProfile else { return nil }
-        return profile.environments.first { $0.name != "local" }
+        let environments = k8sEnvironments
+        if let picked = environments.first(where: { $0.name == selectedK8sEnvName }) {
+            return picked
+        }
+        return environments.first
     }
 
     var portForwardCount: Int { environmentDetail?.portForwards.count ?? portForwardEnvironment?.portForwardCount ?? 0 }
@@ -185,6 +200,7 @@ final class AppState: ObservableObject {
             ?? profile.environments.first { $0.serviceCount > 0 }
             ?? profile.environments.first
         selectedEnvName = env?.name
+        reconcileK8sEnvironment(profile)
         if changed {
             status = nil
             environmentDetail = nil
@@ -196,6 +212,43 @@ final class AppState: ObservableObject {
             if section == .portForward {
                 await refreshEnvironmentDetail()
             }
+        }
+    }
+
+    /// Picks another Kubernetes environment and loads what it holds.
+    func selectK8sEnvironment(_ name: String) {
+        guard name != selectedK8sEnvName else { return }
+        selectedK8sEnvName = name
+        environmentDetail = nil
+        Task { await refreshEnvironmentDetail() }
+    }
+
+    /// Creates a Kubernetes environment. It starts empty: the port forwards
+    /// are added inside it.
+    func createK8sEnvironment(name: String) async -> Bool {
+        guard let client, let profileName = selectedProfileName else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        do {
+            let _: Profile = try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs",
+                body: CreateEnvironmentRequest(name: trimmed)
+            )
+            try await reloadProfiles()
+            selectedK8sEnvName = trimmed
+            await refreshEnvironmentDetail()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Keeps the picked Kubernetes environment when it still exists.
+    private func reconcileK8sEnvironment(_ profile: Profile) {
+        let environments = profile.environments.filter { $0.name != "local" }
+        if !environments.contains(where: { $0.name == selectedK8sEnvName }) {
+            selectedK8sEnvName = environments.first?.name ?? ""
         }
     }
 
@@ -332,6 +385,8 @@ final class AppState: ObservableObject {
             self.selectedEnvName = env?.name
             status = nil
         }
+
+        reconcileK8sEnvironment(profile)
     }
 
     // MARK: - Actions
@@ -604,7 +659,9 @@ final class AppState: ObservableObject {
                 body: CreateProfileRequest(
                     name: name,
                     description: description,
-                    environments: ["local", "dev"]
+                    // Only the docker environment: the Kubernetes ones are
+                    // created from the section, and they start empty.
+                    environments: ["local"]
                 )
             )
             try await reloadProfiles()
