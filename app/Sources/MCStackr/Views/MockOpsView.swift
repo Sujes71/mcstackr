@@ -310,6 +310,12 @@ struct MockParamsSheet: View {
     /// The body is written in the same field as the rest.
     private var isBody: Bool { action.id == "import-expectation" }
 
+    /// The method is chosen, not written.
+    private var isMethod: Bool { action.params?.contains("method") == true }
+
+    /// The methods of the original runtime.
+    private let methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
+
     /// Only the parameters the operation cannot run without block it.
     private var canRun: Bool {
         (action.required ?? []).allSatisfy { !(values[$0] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
@@ -344,13 +350,22 @@ struct MockParamsSheet: View {
                     ForEach(action.params ?? [], id: \.self) { name in
                         VStack(alignment: .leading, spacing: 6) {
                             FieldLabel(text: name)
-                            if isBody {
+                            if isMethod {
+                                Picker("Method", selection: binding(for: name)) {
+                                    ForEach(methods, id: \.self) { method in
+                                        Text(method).tag(method)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+                            } else if isBody {
+                                // The body of an expectation can be long.
                                 TextEditor(text: binding(for: name))
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(Theme.text)
                                     .scrollContentBackground(.hidden)
                                     .padding(8)
-                                    .frame(minHeight: 180)
+                                    .frame(minHeight: 220)
                                     .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                                     .overlay {
                                         RoundedRectangle(cornerRadius: 9, style: .continuous)
