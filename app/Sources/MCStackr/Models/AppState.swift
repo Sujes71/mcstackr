@@ -1032,6 +1032,50 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Reports the result of a git operation with the notice every operation
+    /// of the app uses, so the git section shows it the same way the rest of
+    /// the app does.
+    func reportGitOperation(op: String, detail: String, succeeded: Bool) {
+        let root = gitState?.root ?? ""
+        let repository = root.split(separator: "/").last.map(String.init) ?? "Git"
+        dbNotice = DBJobNotice(
+            id: "git-\(op)-\(Date().timeIntervalSince1970)",
+            service: repository,
+            label: gitOperationLabel(op),
+            syncEnv: gitState?.branch ?? "",
+            succeeded: succeeded,
+            detail: detail,
+            finishedAt: isoNow()
+        )
+    }
+
+    /// The name of a git operation, as the notice shows it.
+    private func gitOperationLabel(_ op: String) -> String {
+        switch op {
+        case "stage": return "Stage"
+        case "stage_all": return "Stage all"
+        case "unstage": return "Unstage"
+        case "unstage_all": return "Unstage all"
+        case "commit": return "Commit"
+        case "amend": return "Amend"
+        case "discard": return "Discard"
+        case "checkout": return "Checkout"
+        case "create_branch": return "Create branch"
+        case "delete_branch": return "Delete branch"
+        case "merge", "merge_continue": return "Merge"
+        case "merge_abort": return "Abort merge"
+        case "push": return "Push"
+        case "pull": return "Pull"
+        case "stash": return "Stash"
+        case "stash_pop": return "Stash pop"
+        case "cherry_pick": return "Cherry-pick"
+        case "resolve_ours", "resolve_theirs": return "Resolve"
+        case "rebase_continue": return "Rebase"
+        case "rebase_abort": return "Abort rebase"
+        default: return op
+        }
+    }
+
     // MARK: - Queue operations
 
     func fetchQueueOps(service: String) async -> QueueOpsInfo? {

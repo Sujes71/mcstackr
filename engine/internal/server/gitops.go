@@ -80,6 +80,10 @@ type gitOpsRequest struct {
 // gitOpsResponse is what an operation returns.
 type gitOpsResponse struct {
 	Output string `json:"output"`
+	// Failed tells the app that the operation did not succeed. The error
+	// comes back as text, and the text alone cannot say whether it is a
+	// failure: a git error reads "git push: ...", not "error: ...".
+	Failed bool `json:"failed"`
 }
 
 // gitWorkDir is the directory the git operations act on: the one the app was
@@ -256,7 +260,7 @@ func (s *Server) handleGitOpRun(w http.ResponseWriter, r *http.Request) {
 
 	out, err := s.runGitOp(dir, req.Op, req.Params)
 	if err != nil {
-		writeJSON(w, http.StatusOK, gitOpsResponse{Output: err.Error()})
+		writeJSON(w, http.StatusOK, gitOpsResponse{Output: err.Error(), Failed: true})
 		return
 	}
 	writeJSON(w, http.StatusOK, gitOpsResponse{Output: out})

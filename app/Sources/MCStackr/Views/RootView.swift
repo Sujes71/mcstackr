@@ -33,16 +33,6 @@ struct RootView: View {
         .frame(minWidth: 1080, minHeight: 700)
         .preferredColorScheme(.dark)
         .task { await state.bootstrap() }
-        .overlay(alignment: .bottom) {
-            // At the bottom, so a notice never covers the header or the
-            // content the user is reading.
-            VStack(spacing: 8) {
-                ErrorBanner()
-                DBNoticeBanner()
-            }
-            .padding(.bottom, 34)
-        }
-        .animation(.easeOut(duration: 0.2), value: state.dbNotice?.id)
     }
 }
 
@@ -131,7 +121,9 @@ private struct RunningPill: View {
 
 // MARK: - Error banner
 
-private struct ErrorBanner: View {
+/// The error of the app. It lives at the top of the section, under the
+/// header, so it never covers the content being read.
+struct ErrorBanner: View {
     @EnvironmentObject private var state: AppState
 
     var body: some View {
@@ -159,10 +151,10 @@ private struct ErrorBanner: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Theme.danger.opacity(0.4), lineWidth: 1)
             }
-            .padding(.bottom, 12)
             .padding(.horizontal, 18)
+            .padding(.vertical, 8)
             .frame(maxWidth: 720)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 }

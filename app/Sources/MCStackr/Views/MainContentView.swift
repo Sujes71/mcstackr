@@ -52,6 +52,7 @@ struct MainContentView: View {
         VStack(spacing: 0) {
             HeaderView(showAddService: $showAddService, showAddPortForward: $showAddPortForward)
             Divider().overlay(Theme.stroke)
+            notices
             content
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -109,6 +110,19 @@ struct MainContentView: View {
             await state.deletePortForward(named: forward.name)
         }
         deleteTarget = nil
+    }
+
+    /// The error of the app and the result of the last operation. They live
+    /// at the top of the section, under the header: every section shows them
+    /// the same way, and they never cover the content being read.
+    private var notices: some View {
+        VStack(spacing: 0) {
+            ErrorBanner()
+            DBNoticeBanner()
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.easeOut(duration: 0.2), value: state.dbNotice?.id)
+        .animation(.easeOut(duration: 0.2), value: state.errorMessage)
     }
 
     @ViewBuilder

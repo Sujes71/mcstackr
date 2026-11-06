@@ -682,4 +682,7 @@ struct GitOpPayload: Encodable {
 
 struct GitOpResult: Codable {
     let output: String
+    /// The operation failed. The engine says it, so the app does not have to
+    /// guess from the text of the message.
+    let failed: Bool?
 }

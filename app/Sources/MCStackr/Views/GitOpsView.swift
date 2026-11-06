@@ -10,8 +10,6 @@ struct GitOpsView: View {
     @State private var selectedPath: String?
     @State private var diffText: String = ""
     @State private var loadingDiff: Bool = false
-    @State private var output: String = ""
-    @State private var errorText: String?
     @State private var busy: Bool = false
     @State private var sheetTarget: SheetTarget?
     @State private var confirm: Confirm?
@@ -76,23 +74,6 @@ struct GitOpsView: View {
                 content(git)
             } else {
                 loading
-            }
-
-            if let message = lastMessage {
-                Divider().overlay(Theme.stroke)
-                HStack(spacing: 8) {
-                    Image(systemName: lastMessageIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(lastMessageIsError ? Theme.danger : Theme.running)
-                    Text(message)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(lastMessageIsError ? Theme.danger : Theme.textMuted)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 22)
-                .padding(.vertical, 8)
             }
 
             Divider().overlay(Theme.stroke)
@@ -476,16 +457,6 @@ struct GitOpsView: View {
         .padding(.vertical, 14)
     }
 
-    /// What the last operation said.
-    private var lastMessage: String? {
-        if let errorText { return errorText }
-        return output.isEmpty ? nil : output
-    }
-
-    private var lastMessageIsError: Bool {
-        errorText != nil
-    }
-
     private func allStaged(_ git: GitState) -> Bool {
         git.stagedStart > 0 && git.stagedStart >= git.files.count
     }
@@ -518,19 +489,20 @@ struct GitOpsView: View {
     }
 
     /// Runs one operation and refreshes the state.
+    ///
+    /// The result is reported with the notice of the app, like every other
+    /// operation, so the git section shows it the same way the rest of the
+    /// app does.
     private func perform(_ op: String, _ params: [String: String]) async {
         busy = true
         let result = await state.runGitOp(op: op, params: params)
         busy = false
         if let result {
-            let text = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-            if text.hasPrefix("unknown operation") || text.hasPrefix("fatal:") || text.hasPrefix("error:") {
-                errorText = text
-                output = ""
-            } else {
-                output = text
-                errorText = nil
-            }
+            state.reportGitOperation(
+                op: op,
+                detail: result.output.trimmingCharacters(in: .whitespacesAndNewlines),
+                succeeded: !(result.failed ?? false)
+            )
         }
         await reload()
     }

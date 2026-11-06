@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Notice for a finished DB operation. It shows up in the main window while
-/// the user works elsewhere, so an operation that outlived its sheet is never
-/// silently lost.
+/// Notice for a finished operation. It shows up in the main window while the
+/// user works elsewhere, so an operation that outlived its sheet is never
+/// silently lost. It lives at the top of the section, under the header, so
+/// it never covers the content being read.
 struct DBNoticeBanner: View {
     @EnvironmentObject private var state: AppState
 
@@ -70,10 +71,10 @@ struct DBNoticeBanner: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke((notice.succeeded ? Theme.running : Theme.danger).opacity(0.45), lineWidth: 1)
             }
-            .padding(.bottom, 12)
             .padding(.horizontal, 18)
+            .padding(.vertical, 8)
             .frame(maxWidth: 520)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(.move(edge: .top).combined(with: .opacity))
             .task(id: notice.id) {
                 // A success can be read at a glance; an error needs more time.
                 let seconds: UInt64 = notice.succeeded ? 8 : 16

@@ -276,6 +276,13 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   branch, continue the merge. The refresh is the one of the header, the same
   that reloads the rest of the app, and it also reloads the state of the
   repository, so a change made outside the app shows up.
+- **S71** — The error of the app and the result of the last operation are
+  shown at the top of the section, under the header, in the same place for
+  every section: the Git section included. They are never at the bottom of
+  the window and never in a strip of their own, and they never cover the
+  content being read. The result of a git operation is one of those notices,
+  and the engine says whether the operation failed, so a failure is never
+  shown as a success.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -349,6 +356,21 @@ MockServer, request collections, git operations.
   engine checks against a scratch repository, and every flow driven in the app
   (stage, commit, discard, checkout, merge, delete branch, log, detail,
   stash, pop, push, conflicts, ours, continue merge).
+- [x] T76 — The notices of the app live at the top of the section, under the
+  header, and the Git section reports its operations with them: the error
+  banner and the notice of the last operation moved out of the window overlay
+  into the content of the section, and the strip the Git view kept at the
+  bottom is gone. The engine says now whether a git operation failed
+  (`failed` in the response of `gitops/run`), because the text of a git error
+  reads `git push: …` and the old guess by prefix called a failure a
+  success. Evidence: `gitops/run` returns `failed: true` for a checkout of a
+  branch that does not exist and `failed: false` for the log of a branch;
+  driven in the app over the accessibility tree, the notice of a failing
+  `Push` sits at y=302, right under the header of the section and above the
+  content, and reads "Push failed" with the text of git; a successful
+  `Stage all` reads "Stage all finished" in the same place; the notice is
+  still there after changing to another section; the Git view has no message
+  strip between the content and the footer.
 
 ## Log
 
@@ -614,3 +636,19 @@ MockServer, request collections, git operations.
   included: checking out a branch does not take the log away. The full review
   against the original runtime listed what is still missing, and the request
   methods now include HEAD and OPTIONS again.
+- **L78 (request, verbatim):** "Hola, vamos a continuar con el desarrolo de
+  mcstackr basado en stackr  nos quedaba arreglar una cosa que ocurre que es
+  eque en la vista de git los errores flotab abajo en vez de arriba cuando
+  deberian estar estandarizados como en las otras los mensajes de exito y
+  error que s emuestren"
+- **L79 (decision):** the standard of the app is that the error and the result
+  of an operation are shown at the top of the section, under the header: the
+  Git section had a strip of its own at the bottom, and the error banner and
+  the notice of the last operation floated at the bottom of the window, so
+  the two were never aligned. Both live now in the same place, at the top of
+  the content of the section, and they never cover the content being read.
+  The Git section reports its operations with the notice of the app, like the
+  DB, queue, mock and request operations do, and the strip at the bottom is
+  gone. The engine says now whether a git operation failed, because the text
+  of a git error reads `git push: …`: the old guess by prefix called a
+  failure a success.
