@@ -571,3 +571,33 @@ struct QueueTable: Codable {
     let columns: [String]
     let rows: [[String]]
 }
+
+
+// MARK: - Mock operations
+
+struct MockAction: Codable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let group: String
+    let params: [String]?
+    let defaults: [String: String]?
+    let destructive: Bool
+    let enabled: Bool
+    let disabledReason: String?
+}
+
+struct MockOpsInfo: Codable {
+    let port: String
+    let actions: [MockAction]
+    let running: Bool
+}
+
+struct MockRunPayload: Encodable {
+    let action: String
+    let params: [String: String]
+}
+
+struct MockRunResult: Codable {
+    let output: String
+    var finishedAt: String?
+}

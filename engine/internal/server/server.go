@@ -73,6 +73,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/requests/items/{name}", s.handleDeleteRequestItem)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/requests/envs", s.handleAddRequestEnv)
 	s.mux.HandleFunc("DELETE /api/profiles/{profile}/requests/envs/{name}", s.handleDeleteRequestEnv)
+	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}/mockops", s.handleMockOps)
+	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/mockops/run", s.handleMockOpRun)
+
 	s.mux.HandleFunc("GET /api/profiles/{profile}/envs/{env}/services/{service}/queueops", s.handleQueueOps)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/queueops/run", s.handleQueueOpRun)
 	s.mux.HandleFunc("POST /api/profiles/{profile}/envs/{env}/services/{service}/queueops/sync-envs", s.handleAddQueueSyncEnv)

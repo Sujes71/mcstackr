@@ -7,6 +7,7 @@ struct MainContentView: View {
     @State private var showAddService = false
     @State private var dbOpsService: ServiceStatus?
     @State private var queueOpsService: ServiceStatus?
+    @State private var mockOpsService: ServiceStatus?
     @State private var deleteTarget: DeleteTarget?
     @State private var logTarget: LogTarget?
     @State private var editingService: ServiceStatus?
@@ -69,6 +70,10 @@ struct MainContentView: View {
         }
         .sheet(item: $queueOpsService) { service in
             QueueOpsView(service: service)
+                .environmentObject(state)
+        }
+        .sheet(item: $mockOpsService) { service in
+            MockOpsView(service: service)
                 .environmentObject(state)
         }
         .sheet(item: $editingService) { service in
@@ -161,6 +166,7 @@ struct MainContentView: View {
                                 },
                                 onDBOps: { dbOpsService = service },
                                 onQueueOps: { queueOpsService = service },
+                                onMockOps: { mockOpsService = service },
                                 onDelete: { deleteTarget = .service(service) }
                             )
                         }
@@ -695,6 +701,7 @@ private struct ServiceCard: View {
     let onLogs: () -> Void
     let onDBOps: () -> Void
     let onQueueOps: () -> Void
+    let onMockOps: () -> Void
     let onDelete: () -> Void
 
     @State private var hovering = false
@@ -734,6 +741,15 @@ private struct ServiceCard: View {
                         tint: Theme.info,
                         help: "Queue operations",
                         action: onQueueOps
+                    )
+                }
+
+                if service.kind == "MOCK" {
+                    ActionIconButton(
+                        systemName: "theatermasks",
+                        tint: Theme.info,
+                        help: "Mock operations",
+                        action: onMockOps
                     )
                 }
 

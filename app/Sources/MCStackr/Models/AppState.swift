@@ -963,6 +963,33 @@ final class AppState: ObservableObject {
         ISO8601DateFormatter().string(from: Date())
     }
 
+    // MARK: - Mock operations
+
+    func fetchMockOps(service: String) async -> MockOpsInfo? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/mockops"
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func runMockOp(service: String, action: String, params: [String: String]) async -> MockRunResult? {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+        do {
+            return try await client.post(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/mockops/run",
+                body: MockRunPayload(action: action, params: params)
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
     // MARK: - Queue operations
 
     func fetchQueueOps(service: String) async -> QueueOpsInfo? {
