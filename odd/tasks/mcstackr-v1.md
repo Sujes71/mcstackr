@@ -595,3 +595,22 @@ MockServer, request collections, git operations.
   opened the search was inside the condition of the cherry-pick, so it did not
   exist in the log of the current branch. The search field is always visible
   now and the filter works in every log.
+
+- **L74 (request):** "por que se te corta?"
+- **L75 (request):** "en el original creo que aparecia con colores de rojo lo que
+  quitas o cambias verde lo que no no se si me epxlico,todo blanco asi queda
+  muy feo. Prueba que todas las funcionalidades funcionan antes de hacer nada
+  perdona el qeu te jodio laprueba fui yo. Haz lo qeu te dije y prueba todas
+  las funcionalidades tiene qeu funciona todo si o si"
+- **L76 (request):** "ok hjaz una full review de todo lo que hemos hecho contra la
+  app original stackr y dime si tenemos todo onos hemos dejado algo. Pero antes
+  cuando salen errores o algo el error se interpone justo debajo del header de
+  forma extraña o sea debajo revisalo. otra cosa el tema de cherry pick no lo
+  conseguiste hacer porque cuando hago checkout a una rama desaparece la opcion
+  de logs que es la que te lleva a poder hacer cherry pick revisalo."
+- **L77 (decision):** the errors and the notices moved to the bottom of the
+  window, so they never cover the header of the section nor the content being
+  read. The log of a branch is offered for every branch, the current one
+  included: checking out a branch does not take the log away. The full review
+  against the original runtime listed what is still missing, and the request
+  methods now include HEAD and OPTIONS again.

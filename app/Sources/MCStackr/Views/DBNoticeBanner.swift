@@ -70,10 +70,10 @@ struct DBNoticeBanner: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke((notice.succeeded ? Theme.running : Theme.danger).opacity(0.45), lineWidth: 1)
             }
-            .padding(.top, 12)
+            .padding(.bottom, 12)
             .padding(.horizontal, 18)
             .frame(maxWidth: 520)
-            .transition(.move(edge: .top).combined(with: .opacity))
+            .transition(.move(edge: .bottom).combined(with: .opacity))
             .task(id: notice.id) {
                 // A success can be read at a glance; an error needs more time.
                 let seconds: UInt64 = notice.succeeded ? 8 : 16

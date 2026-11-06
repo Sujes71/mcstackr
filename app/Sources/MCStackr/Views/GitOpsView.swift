@@ -848,11 +848,14 @@ struct GitBranchesSheet: View {
 
             Spacer(minLength: 4)
 
+            // The log is offered for every branch: checking out one does not
+            // take the log away.
+            ActionIconButton(systemName: "list.bullet", tint: Theme.textMuted, help: "The log of the branch") {
+                onOpenLog(branch)
+                dismiss()
+            }
+
             if !branch.current {
-                ActionIconButton(systemName: "list.bullet", tint: Theme.textMuted, help: "The log of the branch") {
-                    onOpenLog(branch)
-                    dismiss()
-                }
                 ActionIconButton(
                     systemName: "arrow.left.arrow.right",
                     tint: canMerge(branch) ? Theme.info : Theme.textDim,

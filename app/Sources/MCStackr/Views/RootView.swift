@@ -33,14 +33,14 @@ struct RootView: View {
         .frame(minWidth: 1080, minHeight: 700)
         .preferredColorScheme(.dark)
         .task { await state.bootstrap() }
-        .overlay(alignment: .top) {
-            // Below the header of the section, so a notice is never hidden
-            // behind it.
+        .overlay(alignment: .bottom) {
+            // At the bottom, so a notice never covers the header or the
+            // content the user is reading.
             VStack(spacing: 8) {
                 ErrorBanner()
                 DBNoticeBanner()
             }
-            .padding(.top, 96)
+            .padding(.bottom, 34)
         }
         .animation(.easeOut(duration: 0.2), value: state.dbNotice?.id)
     }
@@ -159,10 +159,10 @@ private struct ErrorBanner: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(Theme.danger.opacity(0.4), lineWidth: 1)
             }
-            .padding(.top, 12)
+            .padding(.bottom, 12)
             .padding(.horizontal, 18)
             .frame(maxWidth: 720)
-            .transition(.move(edge: .top).combined(with: .opacity))
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 }

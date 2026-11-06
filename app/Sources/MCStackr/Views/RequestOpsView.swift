@@ -743,7 +743,7 @@ struct RequestWizard: View {
     @State private var localError: String?
     @State private var loaded = false
 
-    private static let methods = ["GET", "POST", "PUT", "PATCH", "DELETE"]
+    private static let methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
     private var isEdit: Bool { existing != nil }
     private var canSave: Bool {
