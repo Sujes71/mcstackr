@@ -1062,11 +1062,7 @@ struct RequestWizard: View {
 
                 if showsBody {
                     FormSection("Body") {
-                        TextEditor(text: $bodyText)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(Theme.text)
-                            .scrollContentBackground(.hidden)
-                            .padding(8)
+                        JSONBodyEditor(text: $bodyText)
                             .frame(minHeight: 120)
                             .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                             .overlay {

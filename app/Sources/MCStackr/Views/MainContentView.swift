@@ -753,6 +753,8 @@ private struct ServiceCard: View {
             Button("View logs", action: onLogs)
             Button("Configure…", action: onOpen)
             Divider()
+            // The environment may stay empty, so this stays available even
+            // when the service is the last one.
             Button("Delete service…", role: .destructive, action: onDelete)
         }
         .onHover { value in
