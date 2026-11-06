@@ -104,30 +104,30 @@ struct SidebarView: View {
             Button {
                 exportWorkspace()
             } label: {
-                Label("Export workspace…", systemImage: "square.and.arrow.up")
+                Label("Export…", systemImage: "square.and.arrow.up")
             }
             .disabled(state.selectedProfile == nil)
 
             Button {
                 importWorkspace()
             } label: {
-                Label("Import workspace…", systemImage: "square.and.arrow.down")
+                Label("Import…", systemImage: "square.and.arrow.down")
             }
 
             Divider()
 
             Button {
-                showNewWorkspace = true
-            } label: {
-                Label("New workspace…", systemImage: "plus")
-            }
-
-            Button {
                 showSettings = true
             } label: {
-                Label("Workspace settings…", systemImage: "slider.horizontal.3")
+                Label("Settings…", systemImage: "slider.horizontal.3")
             }
             .disabled(state.selectedProfile == nil)
+
+            Button {
+                showNewWorkspace = true
+            } label: {
+                Label("New…", systemImage: "plus")
+            }
         } label: {
             HStack(spacing: 9) {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
