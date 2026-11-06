@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @EnvironmentObject private var state: AppState
@@ -93,6 +95,23 @@ struct SidebarView: View {
                         Text(profile.name)
                     }
                 }
+            }
+
+            Divider()
+
+            // A workspace travels as YAML: it can be shared with another
+            // machine.
+            Button {
+                exportWorkspace()
+            } label: {
+                Label("Export workspace…", systemImage: "square.and.arrow.up")
+            }
+            .disabled(state.selectedProfile == nil)
+
+            Button {
+                importWorkspace()
+            } label: {
+                Label("Import workspace…", systemImage: "square.and.arrow.down")
             }
 
             Divider()
@@ -226,6 +245,52 @@ struct SidebarView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
+    }
+
+    // MARK: - Export and import
+
+    /// Writes the workspace in use as YAML, where the user chooses.
+    private func exportWorkspace() {
+        Task {
+            guard let yaml = await state.exportWorkspace() else { return }
+
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "\(state.workspaceName).yaml"
+            panel.canCreateDirectories = true
+            panel.allowedContentTypes = [.yaml]
+            panel.message = "The file holds the passwords of the workspace in plain text."
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+
+            do {
+                try yaml.write(to: url, atomically: true, encoding: .utf8)
+                state.reportNotice(
+                    label: "Export",
+                    detail: "The workspace was written to \(url.lastPathComponent).",
+                    succeeded: true,
+                    service: state.workspaceName
+                )
+            } catch {
+                state.errorMessage = "Could not write the file: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// Reads a workspace from a YAML file the user chooses.
+    private func importWorkspace() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.yaml]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task {
+            guard let yaml = try? String(contentsOf: url, encoding: .utf8) else {
+                state.errorMessage = "Could not read the file."
+                return
+            }
+            await state.importWorkspace(yaml: yaml)
+        }
     }
 
     private var footer: some View {

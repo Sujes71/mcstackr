@@ -77,7 +77,11 @@ struct DBOpsView: View {
     /// The operations of this service. They live in the engine, so they keep
     /// running when the sheet is closed.
     private var serviceJobs: [DBJob] {
-        state.dbJobs.filter { $0.service == service.name }
+        // The jobs of the workspace in use: the same service name can live
+        // in two workspaces.
+        state.dbJobs.filter {
+            $0.service == service.name && $0.profile == state.selectedProfileName
+        }
     }
 
     private var runningCount: Int {

@@ -143,6 +143,11 @@ type createEnvironmentRequest struct {
 	Name string `json:"name"`
 }
 
+// importProfileRequest carries the YAML of an exported workspace.
+type importProfileRequest struct {
+	YAML string `json:"yaml"`
+}
+
 type createServiceRequest struct {
 	Name    string          `json:"name"`
 	Image   string          `json:"image"`
@@ -440,6 +445,51 @@ func (s *Server) handleCreateEnvironment(w http.ResponseWriter, r *http.Request)
 		}
 		p.Environments = append(p.Environments, config.Environment{Name: name})
 		p.UpdatedAt = time.Now()
+		updated = *p
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, toProfileDTO(updated))
+}
+
+// handleExportProfile returns the YAML of a workspace, ready to be shared
+// with another machine.
+func (s *Server) handleExportProfile(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+
+	var data string
+	err := s.store.View(func(c *config.Config) error {
+		out, err := c.ExportProfile(profileName)
+		if err != nil {
+			return err
+		}
+		data = out
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"yaml": data, "name": profileName})
+}
+
+// handleImportProfile creates a workspace from the YAML of an export.
+func (s *Server) handleImportProfile(w http.ResponseWriter, r *http.Request) {
+	var req importProfileRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var updated config.Profile
+	err := s.store.Update(func(c *config.Config) error {
+		p, err := c.ImportProfile(req.YAML)
+		if err != nil {
+			return err
+		}
 		updated = *p
 		return nil
 	})

@@ -339,17 +339,40 @@ struct QueueOpsView: View {
 
     private func run(_ action: QueueAction, values: [String: String]) async {
         errorText = nil
-        guard let outcome = await state.runQueueOp(
+        let (outcome, failure) = await state.runQueueOp(
             service: service.name,
             env: env?.isLocal == true ? "" : selectedEnv,
             action: action.id,
             params: values
-        ) else {
-            errorText = state.errorMessage ?? "Could not run the operation."
+        )
+
+        // The result goes to the notice of the app as well: the window can
+        // be closed while the operation runs, and the notice is what
+        // survives it.
+        if let failure {
+            errorText = failure
+            state.reportNotice(
+                label: action.label,
+                detail: failure,
+                succeeded: false,
+                service: service.name,
+                syncEnv: env?.isLocal == true ? "" : selectedEnv
+            )
+            return
+        }
+        guard let outcome else {
+            errorText = "Could not run the operation."
             return
         }
         lastRun = outcome
         lastRunLabel = action.label
+        state.reportNotice(
+            label: action.label,
+            detail: outcome.output,
+            succeeded: true,
+            service: service.name,
+            syncEnv: env?.isLocal == true ? "" : selectedEnv
+        )
     }
 
     /// The last operation: a table when the output is one, the text otherwise.

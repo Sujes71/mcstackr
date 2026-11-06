@@ -73,7 +73,9 @@ type dbJobDTO struct {
 	StartedAt  string `json:"startedAt"`
 	FinishedAt string `json:"finishedAt,omitempty"`
 	// Context of the operation, so the app can keep track of jobs that
-	// outlive the sheet that started them.
+	// outlive the sheet that started them. The workspace is part of it: the
+	// same service name can live in two workspaces.
+	Profile string `json:"profile,omitempty"`
 	Service string `json:"service,omitempty"`
 	SyncEnv string `json:"syncEnv,omitempty"`
 	Action  string `json:"action,omitempty"`
@@ -93,13 +95,14 @@ func newDBJobRegistry() *dbJobRegistry {
 	return &dbJobRegistry{jobs: map[string]*dbJobDTO{}}
 }
 
-func (r *dbJobRegistry) start(service, syncEnv, action, label string) *dbJobDTO {
+func (r *dbJobRegistry) start(profile, service, syncEnv, action, label string) *dbJobDTO {
 	var raw [8]byte
 	_, _ = rand.Read(raw[:])
 	job := &dbJobDTO{
 		ID:        hex.EncodeToString(raw[:]),
 		State:     "running",
 		StartedAt: time.Now().UTC().Format(time.RFC3339),
+		Profile:   profile,
 		Service:   service,
 		SyncEnv:   syncEnv,
 		Action:    action,
@@ -469,7 +472,7 @@ func (s *Server) handleDBOp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job := s.dbJobs.start(serviceName, req.SyncEnv, action, dbActionLabel(action))
+	job := s.dbJobs.start(profileName, serviceName, req.SyncEnv, action, dbActionLabel(action))
 	syncEnv := *se
 	go func() {
 		output, err := runDBOp(profileName, envName, svc, syncEnv, action)

@@ -309,16 +309,37 @@ struct MockOpsView: View {
 
     private func run(_ action: MockAction, values: [String: String]) async {
         errorText = nil
-        guard let outcome = await state.runMockOp(
+        let (outcome, failure) = await state.runMockOp(
             service: service.name,
             action: action.id,
             params: values
-        ) else {
-            errorText = state.errorMessage ?? "Could not run the operation."
+        )
+
+        // The result goes to the notice of the app as well: the window can
+        // be closed while the operation runs, and the notice is what
+        // survives it.
+        if let failure {
+            errorText = failure
+            state.reportNotice(
+                label: action.label,
+                detail: failure,
+                succeeded: false,
+                service: service.name
+            )
+            return
+        }
+        guard let outcome else {
+            errorText = "Could not run the operation."
             return
         }
         lastRun = outcome
         lastRunLabel = action.label
+        state.reportNotice(
+            label: action.label,
+            detail: outcome.output,
+            succeeded: true,
+            service: service.name
+        )
     }
 }
 

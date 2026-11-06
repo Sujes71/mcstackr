@@ -208,6 +208,11 @@ final class AppState: ObservableObject {
             status = nil
             environmentDetail = nil
             dockerDetail = nil
+            // The operations of the other workspace are not ours: the
+            // operations of the database and the request environment belong
+            // to the workspace that started them.
+            dbJobs = []
+            selectedRequestEnv = ""
         }
         Task {
             await refreshStatus()
@@ -485,6 +490,44 @@ final class AppState: ObservableObject {
                 URLQueryItem(name: "namespace", value: namespace),
             ]
         )
+    }
+
+    /// The YAML of the workspace in use, ready to be shared with another
+    /// machine.
+    func exportWorkspace() async -> String? {
+        guard let client, let profileName = selectedProfileName else { return nil }
+        do {
+            let result: WorkspaceExport = try await client.get(
+                "/api/profiles/\(profileName.pathComponentEncoded)/export"
+            )
+            return result.yaml
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Creates a workspace from the YAML of an export and puts it in use.
+    func importWorkspace(yaml: String) async -> Profile? {
+        guard let client else { return nil }
+        do {
+            let profile: Profile = try await client.post(
+                "/api/profiles/import",
+                body: ImportWorkspaceRequest(yaml: yaml)
+            )
+            try await reloadProfiles()
+            select(profile: profile)
+            reportNotice(
+                label: "Import",
+                detail: "The workspace \(profile.name) is ready.",
+                succeeded: true,
+                service: profile.name
+            )
+            return profile
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
     }
 
     /// The deployments of a namespace, for the manager.
@@ -1187,16 +1230,22 @@ final class AppState: ObservableObject {
         }
     }
 
-    func runMockOp(service: String, action: String, params: [String: String]) async -> MockRunResult? {
-        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else { return nil }
+    func runMockOp(
+        service: String,
+        action: String,
+        params: [String: String]
+    ) async -> (result: MockRunResult?, error: String?) {
+        guard let client, let profileName = selectedProfileName, let env = dockerEnvironment else {
+            return (nil, "The engine is not running.")
+        }
         do {
-            return try await client.post(
+            let result: MockRunResult = try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(env.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/mockops/run",
                 body: MockRunPayload(action: action, params: params)
             )
+            return (result, nil)
         } catch {
-            errorMessage = error.localizedDescription
-            return nil
+            return (nil, error.localizedDescription)
         }
     }
 
@@ -1227,6 +1276,28 @@ final class AppState: ObservableObject {
             errorMessage = error.localizedDescription
             return nil
         }
+    }
+
+    /// Reports a message with the notice of the app: it appears at the top
+    /// of the section and hides itself.
+    func reportNotice(
+        label: String,
+        detail: String,
+        succeeded: Bool,
+        service: String = "",
+        syncEnv: String = "",
+        seconds: UInt64 = 5
+    ) {
+        dbNotice = DBJobNotice(
+            id: "notice-\(label)-\(Date().timeIntervalSince1970)",
+            service: service,
+            label: label,
+            syncEnv: syncEnv,
+            succeeded: succeeded,
+            detail: detail,
+            finishedAt: isoNow(),
+            seconds: seconds
+        )
     }
 
     /// Reports the result of a git operation with the notice every operation
@@ -1288,16 +1359,23 @@ final class AppState: ObservableObject {
         }
     }
 
-    func runQueueOp(service: String, env: String, action: String, params: [String: String]) async -> QueueRunResult? {
-        guard let client, let profileName = selectedProfileName, let dockerEnv = dockerEnvironment else { return nil }
+    func runQueueOp(
+        service: String,
+        env: String,
+        action: String,
+        params: [String: String]
+    ) async -> (result: QueueRunResult?, error: String?) {
+        guard let client, let profileName = selectedProfileName, let dockerEnv = dockerEnvironment else {
+            return (nil, "The engine is not running.")
+        }
         do {
-            return try await client.post(
+            let result: QueueRunResult = try await client.post(
                 "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(dockerEnv.name.pathComponentEncoded)/services/\(service.pathComponentEncoded)/queueops/run",
                 body: QueueRunPayload(env: env, action: action, params: params)
             )
+            return (result, nil)
         } catch {
-            errorMessage = error.localizedDescription
-            return nil
+            return (nil, error.localizedDescription)
         }
     }
 

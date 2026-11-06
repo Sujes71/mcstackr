@@ -13,6 +13,14 @@ struct DBNoticeBanner: View {
         }
     }
 
+    /// The detail of a notice is cut when it is too long: the notice is a
+    /// summary of what happened, not the whole answer.
+    private func truncated(_ detail: String) -> String {
+        let limit = 400
+        guard detail.count > limit else { return detail }
+        return String(detail.prefix(limit)) + "…"
+    }
+
     private func noticeCard(_ notice: DBJobNotice) -> some View {
         HStack(alignment: .top, spacing: 10) {
                 Image(systemName: notice.succeeded ? "checkmark.circle.fill" : "xmark.octagon.fill")
@@ -51,7 +59,7 @@ struct DBNoticeBanner: View {
                     // its own rows.
                     if !notice.detail.isEmpty {
                         LogBlock(
-                            lines: notice.detail.split(separator: "\n", omittingEmptySubsequences: false).map(String.init),
+                            lines: truncated(notice.detail).split(separator: "\n", omittingEmptySubsequences: false).map(String.init),
                             maxLines: 4,
                             messageColor: notice.succeeded ? Theme.textDim : Theme.danger
                         )

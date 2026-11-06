@@ -100,6 +100,17 @@ struct CreateEnvironmentRequest: Encodable {
     let name: String
 }
 
+/// The YAML of an exported workspace.
+struct WorkspaceExport: Decodable {
+    let yaml: String
+    let name: String
+}
+
+/// The body of an imported workspace.
+struct ImportWorkspaceRequest: Encodable {
+    let yaml: String
+}
+
 struct PortConfig: Codable, Hashable {
     var host: String
     var container: String

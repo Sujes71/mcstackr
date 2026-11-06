@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -628,6 +629,8 @@ func (c *Config) DeleteProfile(name string) error {
 	return fmt.Errorf("profile %q not found", name)
 }
 
+// GetProfile returns the profile with the given name, or false when it does
+// not exist.
 func (c *Config) GetProfile(name string) (*Profile, bool) {
 	for i := range c.Profiles {
 		if c.Profiles[i].Name == name {
@@ -635,6 +638,115 @@ func (c *Config) GetProfile(name string) (*Profile, bool) {
 		}
 	}
 	return nil, false
+}
+
+// ExportProfile returns the YAML of a profile, ready to be shared with
+// another machine.
+//
+// The passwords of the sync environments travel in plain text: they are
+// encrypted with the key of this machine, and that key does not exist
+// anywhere else.
+func (c *Config) ExportProfile(name string) (string, error) {
+	p, ok := c.GetProfile(name)
+	if !ok {
+		return "", fmt.Errorf("profile %q not found", name)
+	}
+
+	exported := *p
+	for i := range exported.Environments {
+		for j := range exported.Environments[i].Services {
+			service := &exported.Environments[i].Services[j]
+			for k := range service.SyncEnvs {
+				se := &service.SyncEnvs[k]
+				if se.Password == "" {
+					continue
+				}
+				plain, err := se.GetPassword()
+				if err != nil {
+					return "", fmt.Errorf("read the password of %q: %w", se.Name, err)
+				}
+				se.Password = plain
+			}
+			for k := range service.QueueSyncEnvs {
+				qe := &service.QueueSyncEnvs[k]
+				if qe.Password == "" {
+					continue
+				}
+				plain, err := qe.GetPassword()
+				if err != nil {
+					return "", fmt.Errorf("read the password of %q: %w", qe.Name, err)
+				}
+				qe.Password = plain
+			}
+		}
+	}
+
+	data, err := yaml.Marshal(exported)
+	if err != nil {
+		return "", fmt.Errorf("write the profile: %w", err)
+	}
+	return string(data), nil
+}
+
+// ImportProfile creates a profile from the YAML of an export.
+//
+// The passwords arrive in plain text and are encrypted with the key of this
+// machine, so the workspace works here and nowhere else before.
+func (c *Config) ImportProfile(data string) (*Profile, error) {
+	var p Profile
+	if err := yaml.Unmarshal([]byte(data), &p); err != nil {
+		return nil, fmt.Errorf("invalid profile YAML: %w", err)
+	}
+
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Name == "" {
+		return nil, errors.New("the workspace has no name")
+	}
+	if SanitizeComposeName(p.Name) != p.Name {
+		return nil, fmt.Errorf("the name %q may only contain letters, numbers, _, . and -", p.Name)
+	}
+	if _, exists := c.GetProfile(p.Name); exists {
+		return nil, fmt.Errorf("profile %q already exists", p.Name)
+	}
+
+	for i := range p.Environments {
+		for j := range p.Environments[i].Services {
+			service := &p.Environments[i].Services[j]
+			for k := range service.SyncEnvs {
+				se := &service.SyncEnvs[k]
+				if se.Password == "" || crypto.IsEncrypted(se.Password) {
+					continue
+				}
+				if err := se.SetPassword(se.Password); err != nil {
+					return nil, fmt.Errorf("encrypt the password of %q: %w", se.Name, err)
+				}
+			}
+			for k := range service.QueueSyncEnvs {
+				qe := &service.QueueSyncEnvs[k]
+				if qe.Password == "" || crypto.IsEncrypted(qe.Password) {
+					continue
+				}
+				if err := qe.SetPassword(qe.Password); err != nil {
+					return nil, fmt.Errorf("encrypt the password of %q: %w", qe.Name, err)
+				}
+			}
+		}
+	}
+	p.ConfigVersion = 1
+
+	if err := c.AddProfile(p); err != nil {
+		return nil, err
+	}
+	// The compose of the services is generated again: the imported file
+	// does not carry it.
+	for _, env := range p.Environments {
+		if len(env.Services) > 0 {
+			_, _ = GenerateCompose(p, env.Name)
+		}
+	}
+
+	created, _ := c.GetProfile(p.Name)
+	return created, nil
 }
 
 // DeleteEnvironment removes an environment of a profile, with everything it

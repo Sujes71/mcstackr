@@ -322,6 +322,19 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
 - **S78** — Without a workspace the app is empty: the sidebar shows no
   section and no state, and the header of the window shows no section
   either. There is nothing to navigate to.
+- **S81** — A workspace travels as YAML: it can be exported and imported in
+  another machine. The export carries the whole configuration of the
+  workspace: the services with their variables, volumes, ports and health
+  checks, the database and queue environments with their passwords, the
+  custom actions, the Kubernetes port-forwards, the local processes and the
+  request environments, folders and requests. The passwords travel in plain
+  text and are encrypted again with the key of the machine that imports
+  them: the key of a machine cannot decrypt the secrets of another one, so
+  the console runtime exported secrets that nobody could read.
+- **S82** — Everything belongs to a workspace. The operations of the
+  database of one workspace never show in the sheet of another one, even
+  when both have a service with the same name, and the request environment
+  in use does not survive a change of workspace.
 - **S80** — The result of an operation of the app is reported with the
   notice of the app, so it survives the window that started it: the user can
   close the window while the operation runs and still see what happened.
@@ -520,6 +533,18 @@ MockServer, request collections, git operations.
   top of the section with the standard format ("Restart failed | 06/11 12:06
   | d4i | batch | error: deployments.apps \"batch\" is forbidden: exceeded
   quota"); six seconds later it is gone, because it lives five.
+- [x] T86 — A workspace travels as YAML: the engine exports it
+  (`GET /api/profiles/{profile}/export`) and imports it
+  (`POST /api/profiles/import`), and the app writes and reads the file the
+  user chooses. The audit of the per-workspace state found two leaks and
+  they are fixed. Evidence: the engine answers with the YAML of the
+  workspace, with the password of the database in plain text; the import
+  creates the profile and encrypts the password with the key of the machine
+  (`enc:AES256-GCM:…`); the import of a name that already exists is
+  refused; the app writes the file the user chooses in the panel of macOS
+  and reports it with the notice of the app ("Export finished | The
+  workspace was written to …"); the menu of the workspace offers the two
+  actions.
 - [x] T82 — Every output of the app is drawn with the format of the log: the
   notice of the last operation, the output of a DB, queue and mock
   operation, and the last error of a port-forward. The shared block carries
@@ -902,6 +927,26 @@ MockServer, request collections, git operations.
   se saltará la ventana de context puesto que se inretperta que ese entorno
   esta asociado a ese context me explico? luego cuando no hay ningun
   workspace arreglaste lo que te dije?"
+- **L98 (request, verbatim):** "el export es completo e import igual?
+  literalmente tien que exportar la configuracion completa dumps, kubernetes
+  requests todo absolutamente va por workspace asociado. Por cierto hiciste
+  bien eso? todo lo que hay esta configurado por workspace? requests docker
+  etc...? revisalo tiene que fucnionar como stackr o mejor si ahi me deje
+  algo que no lo se"
+- **L99 (decision):** the export carries the whole configuration of the
+  workspace, the same one the config holds: the services with their
+  variables, volumes, ports and health checks, the database and queue
+  environments with their passwords, the custom actions, the Kubernetes
+  port-forwards, the local processes and the request environments, folders
+  and requests. The passwords travel in plain text and the import encrypts
+  them again with the key of the machine that imports them, because the key
+  of a machine cannot decrypt the secrets of another one. The dump files are
+  NOT part of it: they are data on disk, not configuration. The audit of
+  "is everything per workspace" found two leaks and they are fixed: the
+  operations of the database of the previous workspace stayed in the app
+  (and the engine did not say which workspace they belonged to, so the same
+  service name in two workspaces mixed), and the request environment in use
+  survived the change of workspace.
 - **L96 (request, verbatim):** "no hay ocurrido ningun error ni alerta pero
   en caso de que hubiera las estandarizaste con las demas ventanas
   miaginate que le doy a rollout y cierro la ventana y falla que ocurre?
