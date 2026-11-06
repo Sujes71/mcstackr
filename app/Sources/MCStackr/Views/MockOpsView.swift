@@ -10,10 +10,22 @@ struct MockOpsView: View {
 
     @State private var info: MockOpsInfo?
     @State private var sheetTarget: SheetTarget?
+    @State private var confirmTarget: ConfirmTarget?
     @State private var errorText: String?
     /// The last operation, shown in the sheet like the DB operations do.
     @State private var lastRun: MockRunResult?
     @State private var lastRunLabel: String = ""
+
+    /// A destructive operation waiting for the confirmation.
+    private enum ConfirmTarget: Identifiable {
+        case action(MockAction)
+
+        var id: String {
+            switch self {
+            case .action(let action): return "confirm-\(action.id)"
+            }
+        }
+    }
 
     private enum SheetTarget: Identifiable {
         case params(MockAction)
@@ -57,6 +69,18 @@ struct MockOpsView: View {
         .frame(width: 660, height: 680)
         .background(Theme.background)
         .task { await reload() }
+        .sheet(item: $confirmTarget) { target in
+            switch target {
+            case .action(let action):
+                ConfirmSheet(
+                    title: "\(action.label)?",
+                    message: "This removes every expectation of the mock server. It cannot be undone.",
+                    confirmTitle: "Run"
+                ) {
+                    Task { await run(action, values: [:]) }
+                }
+            }
+        }
         .sheet(item: $sheetTarget) { target in
             switch target {
             case .params(let action):
@@ -273,6 +297,11 @@ struct MockOpsView: View {
     /// An operation with parameters asks for them first.
     private func trigger(_ action: MockAction) {
         errorText = nil
+        // Anything that destroys asks first, with the standard window.
+        if action.destructive {
+            confirmTarget = .action(action)
+            return
+        }
         let params = action.params ?? []
         guard !params.isEmpty else {
             Task { await run(action, values: [:]) }
