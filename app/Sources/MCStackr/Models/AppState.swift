@@ -456,6 +456,27 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// The live logs of a deployment.
+    ///
+    /// The stream follows the deployment: the last lines come first and the
+    /// new ones arrive while the window is open.
+    func k8sDeploymentLogs(
+        context: String,
+        namespace: String,
+        deployment: String,
+        lines: Int = 100
+    ) -> AsyncThrowingStream<String, Error>? {
+        guard let client, selectedProfileName != nil else { return nil }
+        return client.stream(
+            "/api/k8s/deployments/\(deployment.pathComponentEncoded)/logs",
+            query: [
+                URLQueryItem(name: "context", value: context),
+                URLQueryItem(name: "namespace", value: namespace),
+                URLQueryItem(name: "lines", value: "\(lines)"),
+            ]
+        )
+    }
+
     /// First local port from 8080 that no configured forward already uses.
     func nextFreeLocalPort() -> Int {
         let used = Set((environmentDetail?.portForwards ?? []).map(\.localPort))

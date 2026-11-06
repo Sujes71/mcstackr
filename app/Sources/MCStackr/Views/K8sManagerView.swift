@@ -13,6 +13,11 @@ struct K8sManagerView: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.dismiss) private var dismiss
 
+    /// When the manager opens from a port forward, it starts at the
+    /// deployments of that namespace instead of asking for a context.
+    var initialContext: String? = nil
+    var initialNamespace: String? = nil
+
     // MARK: Types
 
     /// The steps of the manager, in the order of the console runtime.
@@ -22,7 +27,6 @@ struct K8sManagerView: View {
         case deployments
         case actions
         case scale
-        case result
     }
 
     /// The actions of a deployment, in the order of the console runtime.
@@ -30,7 +34,6 @@ struct K8sManagerView: View {
         case restart
         case scale
         case logs
-        case describe
         case delete
 
         var id: String { rawValue }
@@ -40,8 +43,7 @@ struct K8sManagerView: View {
             switch self {
             case .restart: return "Rollout restart"
             case .scale: return "Scale replicas"
-            case .logs: return "View the last 100 lines"
-            case .describe: return "Full deployment description"
+            case .logs: return "View the live logs"
             case .delete: return "Delete the deployment"
             }
         }
@@ -52,7 +54,6 @@ struct K8sManagerView: View {
             case .restart: return "Restart"
             case .scale: return "Scale"
             case .logs: return "Logs"
-            case .describe: return "Describe"
             case .delete: return "Delete"
             }
         }
@@ -62,7 +63,6 @@ struct K8sManagerView: View {
             case .restart: return "arrow.clockwise"
             case .scale: return "arrow.up.and.down"
             case .logs: return "text.alignleft"
-            case .describe: return "doc.text"
             case .delete: return "trash"
             }
         }
@@ -72,7 +72,6 @@ struct K8sManagerView: View {
             case .restart: return Theme.warning
             case .scale: return Theme.info
             case .logs: return Theme.violet
-            case .describe: return Theme.info
             case .delete: return Theme.danger
             }
         }
@@ -86,14 +85,22 @@ struct K8sManagerView: View {
         let text: String
     }
 
+    /// The deployment whose live logs are open.
+    private struct K8sLogsTarget: Identifiable {
+        let id = UUID()
+        let context: String
+        let namespace: String
+        let deployment: String
+    }
+
     // MARK: State
 
-    @State private var step: Step = .context
+    @State private var step: Step
     @State private var contexts: [String] = []
     @State private var namespaces: [String] = []
     @State private var deployments: [K8sDeployment] = []
-    @State private var selectedContext = ""
-    @State private var selectedNamespace = ""
+    @State private var selectedContext: String
+    @State private var selectedNamespace: String
     @State private var selectedDeployment: K8sDeployment?
     @State private var kubectlAvailable = true
     @State private var isLoading = false
@@ -101,11 +108,24 @@ struct K8sManagerView: View {
     @State private var localError: String?
     @State private var feedback: Feedback?
     @State private var replicaText = ""
-    @State private var resultAction: DeploymentAction = .logs
-    @State private var resultOutput = ""
-    @State private var resultError: String?
-    @State private var isLoadingResult = false
+    @State private var liveLogs: K8sLogsTarget?
     @State private var confirmDelete = false
+
+    // MARK: Init
+
+    init(initialContext: String? = nil, initialNamespace: String? = nil) {
+        self.initialContext = initialContext
+        self.initialNamespace = initialNamespace
+
+        // With a context and a namespace the manager starts at the
+        // deployments of that namespace: it does not ask for either.
+        let context = self.initialContext ?? ""
+        let namespace = self.initialNamespace ?? ""
+        let opensAtDeployments = !context.isEmpty && !namespace.isEmpty
+        _step = State(initialValue: opensAtDeployments ? .deployments : .context)
+        _selectedContext = State(initialValue: context)
+        _selectedNamespace = State(initialValue: namespace)
+    }
 
     // MARK: Body
 
@@ -131,6 +151,14 @@ struct K8sManagerView: View {
             ) {
                 Task { await runAction(.delete) }
             }
+        }
+        .sheet(item: $liveLogs) { target in
+            K8sLogsSheet(
+                context: target.context,
+                namespace: target.namespace,
+                deployment: target.deployment
+            )
+            .environmentObject(state)
         }
     }
 
@@ -202,16 +230,6 @@ struct K8sManagerView: View {
             }
             .disabled(isRunning || replicaCount == nil)
             .opacity(isRunning || replicaCount == nil ? 0.5 : 1)
-        case .result:
-            ActionTextButton(
-                title: isLoadingResult ? "Reloading…" : "Reload",
-                systemName: "arrow.clockwise",
-                prominent: true
-            ) {
-                Task { await loadResult() }
-            }
-            .disabled(isLoadingResult)
-            .opacity(isLoadingResult ? 0.5 : 1)
         case .context, .namespace, .actions:
             EmptyView()
         }
@@ -221,52 +239,45 @@ struct K8sManagerView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch step {
-        case .result:
-            resultView
-        default:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if !kubectlAvailable {
-                        banner("kubectl was not found in PATH. Install kubectl and reopen this sheet.", color: Theme.danger)
-                    }
-
-                    if let localError {
-                        banner(localError, color: Theme.danger)
-                    }
-
-                    switch step {
-                    case .context:
-                        discoveryList(
-                            items: contexts,
-                            emptyText: "No Kubernetes contexts found.",
-                            isLoading: isLoading
-                        ) { context in
-                            selectContext(context)
-                        }
-                    case .namespace:
-                        discoveryList(
-                            items: namespaces,
-                            emptyText: "No namespaces found in “\(selectedContext)”.",
-                            isLoading: isLoading
-                        ) { namespace in
-                            selectNamespace(namespace)
-                        }
-                    case .deployments:
-                        deploymentList
-                    case .actions:
-                        actionMenu
-                    case .scale:
-                        scaleStep
-                    case .result:
-                        EmptyView()
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if !kubectlAvailable {
+                    banner("kubectl was not found in PATH. Install kubectl and reopen this sheet.", color: Theme.danger)
                 }
-                .padding(22)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let localError {
+                    banner(localError, color: Theme.danger)
+                }
+
+                switch step {
+                case .context:
+                    discoveryList(
+                        items: contexts,
+                        emptyText: "No Kubernetes contexts found.",
+                        isLoading: isLoading
+                    ) { context in
+                        selectContext(context)
+                    }
+                case .namespace:
+                    discoveryList(
+                        items: namespaces,
+                        emptyText: "No namespaces found in “\(selectedContext)”.",
+                        isLoading: isLoading
+                    ) { namespace in
+                        selectNamespace(namespace)
+                    }
+                case .deployments:
+                    deploymentList
+                case .actions:
+                    actionMenu
+                case .scale:
+                    scaleStep
+                }
             }
-            .scrollIndicators(.hidden)
+            .padding(22)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollIndicators(.hidden)
     }
 
     @ViewBuilder
@@ -357,38 +368,6 @@ struct K8sManagerView: View {
             }
 
             feedbackSection
-        }
-    }
-
-    private var resultView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let resultError {
-                banner(resultError, color: Theme.danger)
-                    .padding(22)
-            }
-
-            ScrollView {
-                Text(resultOutput.isEmpty ? "No output." : resultOutput)
-                    .font(Theme.mono)
-                    .foregroundStyle(resultOutput.isEmpty ? Theme.textDim : Theme.text)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(22)
-            }
-            .scrollIndicators(.hidden)
-            .overlay {
-                if isLoadingResult {
-                    VStack(spacing: 10) {
-                        ProgressView().controlSize(.small).tint(Theme.accent)
-                        Text("Running kubectl…")
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(Theme.textDim)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Theme.background.opacity(0.65))
-                }
-            }
         }
     }
 
@@ -567,20 +546,15 @@ struct K8sManagerView: View {
     // MARK: Copy
 
     private var headerTitle: String {
-        if step == .result, let deployment = selectedDeployment { return deployment.name }
-        return "Kubernetes"
+        "Kubernetes"
     }
 
     private var badgeText: String {
-        if step == .result { return resultAction.badge }
-        return stepTitle
+        stepTitle
     }
 
     private var headerSubtitle: String {
-        if step == .result {
-            return "\(selectedContext) / \(selectedNamespace) · \(resultAction.title)"
-        }
-        return "\(state.workspaceName) / \(state.portForwardEnvName ?? "Port Forwards") · \(stepSubtitle)"
+        "\(state.workspaceName) / \(state.portForwardEnvName ?? "Port Forwards") · \(stepSubtitle)"
     }
 
     private var stepTitle: String {
@@ -590,7 +564,6 @@ struct K8sManagerView: View {
         case .deployments: return "Deployments"
         case .actions: return "Actions"
         case .scale: return "Scale replicas"
-        case .result: return resultAction.badge
         }
     }
 
@@ -601,7 +574,6 @@ struct K8sManagerView: View {
         case .deployments: return "Select a deployment"
         case .actions: return "Select an action"
         case .scale: return "Choose the number of replicas"
-        case .result: return resultAction.title
         }
     }
 
@@ -612,7 +584,6 @@ struct K8sManagerView: View {
         case .deployments: return "The list refreshes every 3 seconds."
         case .actions: return "Pick what to do with the deployment."
         case .scale: return "Zero replicas scales the deployment down to no pods."
-        case .result: return "The output of the last request."
         }
     }
 
@@ -646,11 +617,14 @@ struct K8sManagerView: View {
             namespaces = []
         case .deployments:
             step = .namespace
+            // The manager can open at a namespace it was given: the list of
+            // the namespaces is asked again when it is needed.
+            if namespaces.isEmpty {
+                Task { await loadNamespaces() }
+            }
         case .actions:
             step = .deployments
         case .scale:
-            step = .actions
-        case .result:
             step = .actions
         }
     }
@@ -686,8 +660,8 @@ struct K8sManagerView: View {
         case .scale:
             replicaText = String((selectedDeployment?.desired ?? 0) + 1)
             step = .scale
-        case .logs, .describe:
-            Task { await openResult(action) }
+        case .logs:
+            openLogs()
         case .delete:
             confirmDelete = true
         }
@@ -725,40 +699,19 @@ struct K8sManagerView: View {
             // The deployment is gone: the list is the only thing left.
             selectedDeployment = nil
             step = .deployments
-        case .restart, .logs, .describe:
+        case .restart, .logs:
             break
         }
     }
 
-    /// Opens the output of an action that answers with the output itself.
-    private func openResult(_ action: DeploymentAction) async {
-        guard selectedDeployment != nil else { return }
-        resultAction = action
-        resultOutput = ""
-        resultError = nil
-        step = .result
-        await loadResult()
-    }
-
-    private func loadResult() async {
+    /// Opens the live logs of the deployment in a window of their own.
+    private func openLogs() {
         guard let deployment = selectedDeployment else { return }
-        isLoadingResult = true
-        defer { isLoadingResult = false }
-
-        let (output, error) = await state.runK8sDeploymentAction(
-            resultAction.rawValue,
+        liveLogs = K8sLogsTarget(
             context: selectedContext,
             namespace: selectedNamespace,
             deployment: deployment.name
         )
-        guard !Task.isCancelled else { return }
-
-        if let error {
-            resultError = error
-        } else {
-            resultOutput = output ?? ""
-            resultError = nil
-        }
     }
 
     private func successText(_ action: DeploymentAction, replicas: Int?) -> String {
@@ -766,7 +719,7 @@ struct K8sManagerView: View {
         case .restart: return "Restart requested"
         case .scale: return "Scaled to \(replicas ?? 0) replicas"
         case .delete: return "Deployment deleted"
-        case .logs, .describe: return action.title
+        case .logs: return action.title
         }
     }
 
@@ -802,7 +755,11 @@ struct K8sManagerView: View {
         defer { isLoading = false }
         do {
             namespaces = try await state.k8sNamespaces(context: selectedContext)
-            step = .namespace
+            // The step moves on only when the user is still where the
+            // namespaces were asked from.
+            if step == .context {
+                step = .namespace
+            }
         } catch {
             localError = error.localizedDescription
         }

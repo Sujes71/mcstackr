@@ -40,28 +40,18 @@ struct LogsSheet: View {
 
             Divider().overlay(Theme.stroke)
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(lines.isEmpty ? "Waiting for logs…" : lines.joined(separator: "\n"))
-                            .font(.system(size: 11.5, design: .monospaced))
-                            .foregroundStyle(lines.isEmpty ? Theme.textDim : Theme.text)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            ZStack {
+                LiveLogView(lines: lines)
 
-                        Color.clear
-                            .frame(height: 1)
-                            .id("bottom")
-                    }
-                    .padding(16)
-                }
-                .scrollIndicators(.hidden)
-                .onChange(of: lines.count) { _, _ in
-                    withAnimation(.linear(duration: 0.12)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                if lines.isEmpty {
+                    Text("Waiting for logs…")
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(Theme.textDim)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(16)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Theme.background)
         }
         .frame(minWidth: 560, idealWidth: 720, maxWidth: 820)

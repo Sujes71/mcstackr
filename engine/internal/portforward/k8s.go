@@ -1,6 +1,7 @@
 package portforward
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -115,34 +116,67 @@ func ScaleDeployment(ctxName, namespace, deploy string, replicas int) (string, e
 	return strings.TrimSpace(string(out)), nil
 }
 
-// GetDeploymentLogs runs kubectl logs deployment/<name> --tail=<lines>.
+// DeploymentLogs follows the logs of a deployment and writes every line to
+// the channel, the way the docker logs do.
 //
-// It does not follow the logs: the console runtime streamed them to the
-// terminal, but an app cannot hand its terminal over to kubectl. The last
-// lines are read instead, and the view asks for them again when it wants
-// more.
-func GetDeploymentLogs(ctxName, namespace, deploy string, lines int) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "kubectl", "logs",
-		"deployment/"+deploy, fmt.Sprintf("--tail=%d", lines),
-		"--context", ctxName, "-n", namespace).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("%s", strings.TrimSpace(string(out)))
-	}
-	return string(out), nil
-}
+// The last lines come first and the stream follows the deployment until the
+// caller closes the done channel, which happens when the request ends.
+func DeploymentLogs(ctxName, namespace, deploy string, lines int, ch chan<- string, done <-chan struct{}) {
+	cmd := exec.Command("kubectl", "logs", "-f",
+		fmt.Sprintf("--tail=%d", lines),
+		"--context", ctxName, "-n", namespace,
+		"deployment/"+deploy)
 
-// DescribeDeployment runs kubectl describe deployment/<name>.
-func DescribeDeployment(ctxName, namespace, deploy string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, "kubectl", "describe",
-		"deployment/"+deploy, "--context", ctxName, "-n", namespace).CombinedOutput()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", fmt.Errorf("%s", strings.TrimSpace(string(out)))
+		ch <- "error: " + err.Error()
+		close(ch)
+		return
 	}
-	return string(out), nil
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		ch <- "error: " + err.Error()
+		close(ch)
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		ch <- "error: " + err.Error()
+		close(ch)
+		return
+	}
+
+	// The request ended: the process of kubectl dies with it.
+	go func() {
+		<-done
+		_ = cmd.Process.Kill()
+	}()
+
+	// The error of kubectl comes on its own stream: it is a line of the log
+	// too, so the view shows it where it happened.
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			select {
+			case ch <- scanner.Text():
+			case <-done:
+				return
+			}
+		}
+	}()
+
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		select {
+		case ch <- scanner.Text():
+		case <-done:
+			_ = cmd.Wait()
+			close(ch)
+			return
+		}
+	}
+	_ = cmd.Wait()
+	close(ch)
 }
 
 // DeleteDeployment runs kubectl delete deployment/<name>.

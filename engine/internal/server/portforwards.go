@@ -622,8 +622,9 @@ func (s *Server) handleK8sDeployments(w http.ResponseWriter, r *http.Request) {
 
 // handleK8sDeploymentAction runs one action of the manager over a deployment.
 //
-// The actions are the ones of the console runtime: restart, scale, logs,
-// describe and delete. The shell is not one of them.
+// The actions are the ones the app needs: restart, scale and delete. The
+// logs have their own endpoint, and the description of a deployment is not
+// one of the actions of the manager.
 func (s *Server) handleK8sDeploymentAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue("action")
 	contextName := strings.TrimSpace(r.URL.Query().Get("context"))
@@ -646,14 +647,6 @@ func (s *Server) handleK8sDeploymentAction(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		out, err = portforward.ScaleDeployment(contextName, namespace, deployment, replicas)
-	case "logs":
-		lines := 100
-		if v, convErr := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("lines"))); convErr == nil && v > 0 {
-			lines = v
-		}
-		out, err = portforward.GetDeploymentLogs(contextName, namespace, deployment, lines)
-	case "describe":
-		out, err = portforward.DescribeDeployment(contextName, namespace, deployment)
 	case "delete":
 		out, err = portforward.DeleteDeployment(contextName, namespace, deployment)
 	default:
@@ -665,6 +658,58 @@ func (s *Server) handleK8sDeploymentAction(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, k8sActionDTO{Output: out})
+}
+
+// handleK8sDeploymentLogs follows the logs of a deployment and streams them,
+// the way the logs of a service are streamed.
+//
+// The frames are the same the logs of a service use: a preamble, one frame
+// per line, and a frame that closes the stream.
+func (s *Server) handleK8sDeploymentLogs(w http.ResponseWriter, r *http.Request) {
+	deployment := r.PathValue("deployment")
+	contextName := strings.TrimSpace(r.URL.Query().Get("context"))
+	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	if contextName == "" || namespace == "" || deployment == "" {
+		writeError(w, http.StatusBadRequest, "context, namespace and deployment are required")
+		return
+	}
+	lines := 100
+	if v, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("lines"))); err == nil && v > 0 {
+		lines = v
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming is not supported")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "retry: 1000\n\n")
+	flusher.Flush()
+
+	logs := make(chan string, 128)
+	done := make(chan struct{})
+	go portforward.DeploymentLogs(contextName, namespace, deployment, lines, logs, done)
+	defer close(done)
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case line, ok := <-logs:
+			if !ok {
+				fmt.Fprint(w, "event: end\ndata: \n\n")
+				flusher.Flush()
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", line)
+			flusher.Flush()
+		}
+	}
 }
 
 // ── Wiring helpers ──────────────────────────────────────────────────────────
