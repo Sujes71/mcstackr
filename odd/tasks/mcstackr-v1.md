@@ -319,8 +319,13 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   deployments of its namespace, on the actions of the deployment of the
   forward itself: it does not ask for the context, the namespace or the
   deployment, and the list of the namespace is never in between.
-- **S78** — Without a workspace the sidebar shows no section: there is
-  nothing to navigate to.
+- **S78** — Without a workspace the app is empty: the sidebar shows no
+  section and no state, and the header of the window shows no section
+  either. There is nothing to navigate to.
+- **S79** — A Kubernetes environment belongs to a context. The window that
+  adds a port-forward asks for the context only when the environment has no
+  forwards yet: after the first one, the environment knows its context and
+  the window goes straight to the namespaces.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -496,6 +501,13 @@ MockServer, request collections, git operations.
   in "ACTIONS | Name | batch | Namespace | d4i" without the list of the
   namespace in between; without a workspace the sidebar has no section
   button at all.
+- [x] T84 — The window that adds a port-forward skips the context when the
+  environment already holds forwards, and the app is empty without a
+  workspace. Evidence: driven in the app over the accessibility tree, the
+  window opens in "NAMESPACE" for an environment that already has a forward
+  and in "CONTEXT" for one that has none; without a workspace the only
+  button of the app is "New workspace", with no section, no state in the
+  footer of the sidebar and no title nor actions in the header.
 - [x] T82 — Every output of the app is drawn with the format of the log: the
   notice of the last operation, the output of a DB, queue and mock
   operation, and the last error of a port-forward. The shared block carries
@@ -873,6 +885,17 @@ MockServer, request collections, git operations.
 - **L92 (request, verbatim):** "bro la ventana de no environments in use solo
   debe aparecer cuando de verdad no hay creado ningun environment sino debe
   aparecer siempre el primero mamon"
+- **L94 (request, verbatim):** "ok, otra cosa, cuando en un environment
+  añado un primer forward cuando quiera añadir los siguiente automaticamente
+  se saltará la ventana de context puesto que se inretperta que ese entorno
+  esta asociado a ese context me explico? luego cuando no hay ningun
+  workspace arreglaste lo que te dije?"
+- **L95 (decision):** the window that adds a port-forward asks for the
+  context only when the environment has no forwards yet: the environment
+  belongs to a context, and after the first forward the window goes straight
+  to the namespaces. Without a workspace the app is empty: no section in the
+  sidebar, no state in its footer and no title nor actions in the header of
+  the window.
 - **L93 (decision):** the manager opens from a port forward on the ACTIONS of
   the deployment of the forward, never on the list of the namespace; the
   numbers of the deployment arrive with the list, so the window is useful
