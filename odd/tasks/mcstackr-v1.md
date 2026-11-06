@@ -301,12 +301,21 @@ that reuses the Stackr domain packages. Test runner: none for this slice (see L3
   inside it. The environments of the workspace that are not the docker one
   are the Kubernetes ones, and the section moves between them the way the
   Request section moves between its request environments. A new workspace has
-  no Kubernetes environment at all until the user creates one.
+  no Kubernetes environment at all until the user creates one, and none of
+  them is in use until the user picks one: the app does not choose for him.
+  Every environment can be removed, with the window the app uses for every
+  destructive action, and the port forwards it holds go with it.
 - **S75** — The logs of a deployment are live and well formatted: they
   arrive while the window is open, every line is a row of its own with its
   timestamp and its level coloured, and the scroll follows the stream
-  without jumping. The logs of a container are shown the same way.
+  without jumping. The logs of a container are shown the same way, and so is
+  every output the app shows: the notice of the last operation, the output of
+  a DB, queue or mock operation and the last error of a port-forward all
+  use the format of the log.
 - **S76** — The sections are named Docker, Kubernetes, Request and Git.
+- **S77** — The button of a port forward opens the manager of the
+  deployments of its namespace, on the deployment of the forward itself: it
+  does not ask for the context, the namespace or the deployment.
 
 
 Non-goals for this slice: Kubernetes management, DB operations, queues,
@@ -451,6 +460,30 @@ MockServer, request collections, git operations.
   written there creates it, and the section shows it in use with
   "0 port-forwards" and the empty state that invites to add one; the config
   keeps the new environment with nothing inside it.
+- [x] T81 — The environments of Kubernetes can be removed and none of them
+  is in use until the user picks one: the app does not choose an environment
+  for him. The engine got the endpoint that removes one (`DELETE
+  /api/profiles/{p}/envs/{env}`, with the docker environment protected), and
+  the section got the button that removes the one in use, with the window the
+  app uses for every destructive action. The button of a port forward opens
+  the manager on the deployment of the forward itself. Evidence: driven in
+  the app over the accessibility tree with a config of its own, the section
+  opens with "No environment in use" and the selector listing the
+  environments of the workspace; picking one shows its port forwards; the
+  button of the row opens the manager already in the actions of the
+  deployment of the forward ("Name | batch | Namespace | d4i | Replicas |
+  1/1"); the removal asks first with "Remove \u{201C}dev\u{201D}?" and, once
+  confirmed, the config keeps only the docker environment and the section
+  goes back to "No Kubernetes environment".
+- [x] T82 — Every output of the app is drawn with the format of the log: the
+  notice of the last operation, the output of a DB, queue and mock
+  operation, and the last error of a port-forward. The shared block carries
+  the colour of the state, because a row of the log paints its own colour
+  and a parent cannot change it. Evidence: the detail of the notice of a
+  failing git operation is drawn as one row per line ("git push
+  --set-upstream origin HEAD: fatal: ...", "fatal: Could not read from
+  remote repository.", "Please make sure you have the correct access
+  rights") instead of one block of text.
 
 ## Log
 - **L1 (user request, verbatim):**
@@ -797,3 +830,21 @@ MockServer, request collections, git operations.
   runtime ended up empty. The app can do what the terminal did, and the
   engine streams the logs of a deployment with the same frames the logs of
   a service use.
+- **L88 (request, verbatim):** "vale un par de cosas mas, tiens que dejar
+  eliminar todos los entornos, y no hay entorno por defecto de primera, no
+  veo el delete y el dialog de confirmacion estandar, tambien cuando el das
+  al kubernetes directo desde un forward debe llevarte automaticamente a la
+  ventana de ese kubernetes me explico? no al selector del d4i de ese
+  entorno. y creo que me he dejado algo pero de momento vamos con esto"
+- **L89 (request, verbatim):** "tambien los logs de los docker y no se si
+  hay mas logs no estan igual de formateados que todo los logs de la app git
+  etc.. tengan el mismo formateo de logs"
+- **L90 (decision):** every environment of Kubernetes can be removed, with
+  the window the app uses for every destructive action, and none of them is
+  in use until the user picks one: the app does not choose an environment
+  for him, and a new workspace has none at all. The button of a port forward
+  opens the manager on the deployment of the forward itself, not on a list
+  where the deployment has to be picked. Every output the app draws uses the
+  format of the log: the notice of the last operation, the output of the DB,
+  queue and mock operations and the last error of a port-forward are drawn
+  with the same rows as the live log.

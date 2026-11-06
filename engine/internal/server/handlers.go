@@ -450,6 +450,28 @@ func (s *Server) handleCreateEnvironment(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, toProfileDTO(updated))
 }
 
+// handleDeleteEnvironment removes an environment of a workspace, with the
+// port forwards it holds.
+func (s *Server) handleDeleteEnvironment(w http.ResponseWriter, r *http.Request) {
+	profileName := r.PathValue("profile")
+	envName := r.PathValue("env")
+
+	var updated config.Profile
+	err := s.store.Update(func(c *config.Config) error {
+		p, err := c.DeleteEnvironment(profileName, envName)
+		if err != nil {
+			return err
+		}
+		updated = *p
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toProfileDTO(updated))
+}
+
 // ── Status ──────────────────────────────────────────────────────────────────
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {

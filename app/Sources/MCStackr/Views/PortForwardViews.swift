@@ -384,15 +384,35 @@ struct PortForwardView: View {
     /// The environment in use.
     private var environmentName: String { state.portForwardEnvironment?.name ?? "" }
 
+    /// The removal of the environment in use asks first.
+    @State private var confirmDeleteEnvironment = false
+    @State private var isDeleting = false
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if state.k8sEnvironments.isEmpty {
                     K8sEnvironmentsEmptyView()
                 } else {
-                    envSelector
+                    HStack(spacing: 10) {
+                        envSelector
 
-                    if let detail = state.environmentDetail {
+                        // The environment in use can be removed, like every
+                        // other thing the app deletes.
+                        ActionIconButton(
+                            systemName: "trash",
+                            tint: Theme.danger,
+                            help: "Remove the Kubernetes environment"
+                        ) {
+                            confirmDeleteEnvironment = true
+                        }
+                        .disabled(environmentName.isEmpty || isDeleting)
+                        .opacity(environmentName.isEmpty ? 0.35 : 1)
+                    }
+
+                    if environmentName.isEmpty {
+                        K8sNoEnvironmentSelectedView()
+                    } else if let detail = state.environmentDetail {
                         if detail.portForwards.isEmpty {
                             PortForwardEmptyView(onAdd: onAdd)
                         } else {
@@ -442,6 +462,26 @@ struct PortForwardView: View {
         .scrollIndicators(.hidden)
         .onAppear {
             Task { await state.refreshEnvironmentDetail() }
+        }
+        .sheet(isPresented: $confirmDeleteEnvironment) {
+            ConfirmSheet(
+                title: "Remove “\(environmentName)”?",
+                message: "The environment and the port forwards it holds are removed. The workspace keeps the rest.",
+                confirmTitle: "Remove"
+            ) {
+                Task { await deleteEnvironment() }
+            }
+        }
+    }
+
+    /// Removes the environment in use.
+    private func deleteEnvironment() async {
+        let name = environmentName
+        guard !name.isEmpty else { return }
+        isDeleting = true
+        defer { isDeleting = false }
+        if await state.deleteK8sEnvironment(name: name) {
+            confirmDeleteEnvironment = false
         }
     }
 
@@ -517,8 +557,7 @@ struct PortForwardView: View {
 }
 
 /// The workspace has no Kubernetes environment yet. The header creates them.
-private struct K8sEnvironmentsEmptyView: View {
-    var body: some View {
+private struct K8sEnvironmentsEmptyView: View {    var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "square.stack.3d.down.forward")
                 .font(.system(size: 34, weight: .light))
@@ -529,6 +568,30 @@ private struct K8sEnvironmentsEmptyView: View {
                 .foregroundStyle(Theme.text)
 
             Text("Use the + button of the header to create one. It starts empty and holds the port forwards.")
+                .font(.system(size: 12, design: .rounded))
+                .foregroundStyle(Theme.textMuted)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 70)
+    }
+}
+
+/// The workspace has environments, but none of them is in use: the app does
+/// not choose one for the user.
+private struct K8sNoEnvironmentSelectedView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "square.stack.3d.down.forward")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Theme.textDim)
+
+            Text("No environment in use")
+                .font(Theme.title(18))
+                .foregroundStyle(Theme.text)
+
+            Text("Pick one of the environments of the workspace above. The port forwards of the one in use are shown here.")
                 .font(.system(size: 12, design: .rounded))
                 .foregroundStyle(Theme.textMuted)
                 .multilineTextAlignment(.center)

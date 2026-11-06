@@ -17,6 +17,10 @@ struct K8sManagerView: View {
     /// deployments of that namespace instead of asking for a context.
     var initialContext: String? = nil
     var initialNamespace: String? = nil
+    /// The deployment the manager opens with. It comes from a port forward:
+    /// the service of the forward is the deployment, so the manager lands on
+    /// it instead of on the list of the namespace.
+    var initialDeployment: String? = nil
 
     // MARK: Types
 
@@ -109,13 +113,16 @@ struct K8sManagerView: View {
     @State private var feedback: Feedback?
     @State private var replicaText = ""
     @State private var liveLogs: K8sLogsTarget?
+    /// The deployment the manager was opened with is already on screen.
+    @State private var openedInitialDeployment = false
     @State private var confirmDelete = false
 
     // MARK: Init
 
-    init(initialContext: String? = nil, initialNamespace: String? = nil) {
+    init(initialContext: String? = nil, initialNamespace: String? = nil, initialDeployment: String? = nil) {
         self.initialContext = initialContext
         self.initialNamespace = initialNamespace
+        self.initialDeployment = initialDeployment
 
         // With a context and a namespace the manager starts at the
         // deployments of that namespace: it does not ask for either.
@@ -798,6 +805,20 @@ struct K8sManagerView: View {
 
         deployments = loaded ?? []
         localError = nil
+        openInitialDeploymentIfAny(loaded ?? [])
+    }
+
+    /// Opens the deployment the manager came for, when it is in the list.
+    ///
+    /// It happens once: the poll of the list must not take the user back to
+    /// the deployment every three seconds.
+    private func openInitialDeploymentIfAny(_ loaded: [K8sDeployment]) {
+        guard !openedInitialDeployment,
+              let wanted = initialDeployment,
+              !wanted.isEmpty,
+              let match = loaded.first(where: { $0.name == wanted }) else { return }
+        openedInitialDeployment = true
+        selectDeployment(match)
     }
 }
 

@@ -121,14 +121,12 @@ final class AppState: ObservableObject {
         return profile.environments.filter { $0.name != "local" }
     }
 
-    /// The Kubernetes environment in use: the one the user picked, or the
-    /// first one when there is none picked yet.
+    /// The Kubernetes environment in use: the one the user picked.
+    ///
+    /// There is none until the user picks one: the app does not choose an
+    /// environment for him, and a new workspace has none at all.
     var portForwardEnvironment: ProfileEnvironment? {
-        let environments = k8sEnvironments
-        if let picked = environments.first(where: { $0.name == selectedK8sEnvName }) {
-            return picked
-        }
-        return environments.first
+        k8sEnvironments.first(where: { $0.name == selectedK8sEnvName })
     }
 
     var portForwardCount: Int { environmentDetail?.portForwards.count ?? portForwardEnvironment?.portForwardCount ?? 0 }
@@ -244,11 +242,32 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Keeps the picked Kubernetes environment when it still exists.
+    /// Removes a Kubernetes environment, with the port forwards it holds.
+    func deleteK8sEnvironment(name: String) async -> Bool {
+        guard let client, let profileName = selectedProfileName else { return false }
+        do {
+            let _: Profile = try await client.delete(
+                "/api/profiles/\(profileName.pathComponentEncoded)/envs/\(name.pathComponentEncoded)"
+            )
+            if selectedK8sEnvName == name {
+                selectedK8sEnvName = ""
+                environmentDetail = nil
+            }
+            try await reloadProfiles()
+            await refreshEnvironmentDetail()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Keeps the picked Kubernetes environment when it still exists. It does
+    /// not pick one when there is none: the user chooses.
     private func reconcileK8sEnvironment(_ profile: Profile) {
         let environments = profile.environments.filter { $0.name != "local" }
         if !environments.contains(where: { $0.name == selectedK8sEnvName }) {
-            selectedK8sEnvName = environments.first?.name ?? ""
+            selectedK8sEnvName = ""
         }
     }
 

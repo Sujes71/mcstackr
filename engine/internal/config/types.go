@@ -637,6 +637,33 @@ func (c *Config) GetProfile(name string) (*Profile, bool) {
 	return nil, false
 }
 
+// DeleteEnvironment removes an environment of a profile, with everything it
+// holds: the port forwards and the local processes go with it.
+//
+// The docker environment ("local") cannot be removed: the services of the
+// workspace live there.
+func (c *Config) DeleteEnvironment(profileName, envName string) (*Profile, error) {
+	for i := range c.Profiles {
+		if c.Profiles[i].Name != profileName {
+			continue
+		}
+		p := &c.Profiles[i]
+		for j, env := range p.Environments {
+			if env.Name != envName {
+				continue
+			}
+			if envName == "local" {
+				return nil, fmt.Errorf("the %q environment cannot be removed", envName)
+			}
+			p.Environments = append(p.Environments[:j], p.Environments[j+1:]...)
+			p.UpdatedAt = time.Now()
+			return p, nil
+		}
+		return nil, fmt.Errorf("environment %q not found in profile %q", envName, profileName)
+	}
+	return nil, fmt.Errorf("profile %q not found", profileName)
+}
+
 // DeleteService removes a service from the given environment in a profile.
 // Returns the updated profile so the caller can refresh their reference.
 func (c *Config) DeleteService(profileName, envName, svcName string) (*Profile, error) {

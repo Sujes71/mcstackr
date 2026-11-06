@@ -107,7 +107,11 @@ struct MainContentView: View {
                 .environmentObject(state)
         }
         .sheet(item: $k8sManagerTarget) { target in
-            K8sManagerView(initialContext: target.context, initialNamespace: target.namespace)
+            K8sManagerView(
+                initialContext: target.context,
+                initialNamespace: target.namespace,
+                initialDeployment: target.deployment
+            )
                 .environmentObject(state)
         }
         .sheet(isPresented: $showAddK8sEnv) {
@@ -149,7 +153,8 @@ struct MainContentView: View {
                 onOpenK8s: { forward in
                     k8sManagerTarget = K8sManagerTarget(
                         context: forward.k8sContext,
-                        namespace: forward.k8sNamespace
+                        namespace: forward.k8sNamespace,
+                        deployment: forward.k8sService
                     )
                 }
             )
@@ -241,6 +246,8 @@ private struct K8sManagerTarget: Identifiable {
     let id = UUID()
     let context: String?
     let namespace: String?
+    /// The deployment of the namespace the manager opens with.
+    let deployment: String?
 }
 
 // MARK: - Header
@@ -378,7 +385,7 @@ private struct HeaderView: View {
             }
 
             ActionIconButton(systemName: "square.stack.3d.down.forward", tint: Theme.info, help: "Manage the Kubernetes deployments") {
-                k8sManagerTarget = K8sManagerTarget(context: nil, namespace: nil)
+                k8sManagerTarget = K8sManagerTarget(context: nil, namespace: nil, deployment: nil)
             }
 
             // The header creates the environment; the port forwards are
