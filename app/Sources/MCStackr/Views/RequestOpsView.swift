@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - Request operations
@@ -11,6 +12,9 @@ struct RequestOpsView: View {
     @State private var errorText: String?
     /// The folders the user has opened. They all start folded.
     @State private var expanded: Set<String> = []
+    /// The key monitor that gives the space key its meaning: it expands or
+    /// collapses every folder, as the console runtime does.
+    @State private var keyMonitor: Any?
 
     /// What is about to be deleted. Every delete asks first, with the same
     /// window the rest of the app uses.
@@ -121,6 +125,8 @@ struct RequestOpsView: View {
         }
         .scrollIndicators(.hidden)
         .task { await reload() }
+        .onAppear { installKeyMonitor() }
+        .onDisappear { removeKeyMonitor() }
         .onChange(of: state.refreshToken) { _, _ in
             Task { await reload() }
         }
@@ -354,8 +360,11 @@ struct RequestOpsView: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(url.isEmpty ? Theme.textDim.opacity(0.4) : Theme.textDim)
                         .frame(width: 14, height: 14)
+                        .padding(6)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .padding(-6)
                 .help(isExpanded ? "Collapse" : "Expand")
 
                 Image(systemName: "folder.fill")
@@ -412,34 +421,49 @@ struct RequestOpsView: View {
 
     private func requestRow(_ request: RequestDefinition) -> some View {
         HStack(spacing: 10) {
-            Text(request.method.uppercased())
-                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                .foregroundStyle(methodTint(request.method))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(methodTint(request.method).opacity(0.14), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .frame(width: 58, alignment: .leading)
+            Button {
+                sheetTarget = .request(folder: request.baseUrlName, request: request)
+            } label: {
+                HStack(spacing: 10) {
+                    Text(request.method.uppercased())
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(methodTint(request.method))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(methodTint(request.method).opacity(0.14), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .frame(width: 58, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(request.name)
-                        .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                        .foregroundStyle(canRun(request) ? Theme.text : Theme.textDim)
-                    if request.isLogin {
-                        Image(systemName: hasToken ? "lock.open" : "lock")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(hasToken ? Theme.running : Theme.warning)
-                            .help(hasToken ? "The token is available" : "No token yet: run the login request first")
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(request.name)
+                                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
+                                .foregroundStyle(canRun(request) ? Theme.text : Theme.textDim)
+                            if request.isLogin {
+                                Image(systemName: hasToken ? "lock.open" : "lock")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(hasToken ? Theme.running : Theme.warning)
+                                    .help(hasToken ? "The token is available" : "No token yet: run the login request first")
+                            }
+                        }
+                        Text(request.path)
+                            .font(Theme.monoSmall)
+                            .foregroundStyle(Theme.textDim)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
-                }
-                Text(request.path)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textDim)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
 
-            Spacer(minLength: 8)
+                    Spacer(minLength: 8)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Edit request")
+
+            ActionIconButton(systemName: "doc.on.doc", tint: Theme.info, help: "Copy as cURL") {
+                copyCurl(for: request)
+            }
+            .disabled(!canRun(request))
+            .opacity(canRun(request) ? 1 : 0.4)
 
             ActionIconButton(systemName: "play.fill", tint: Theme.info, help: runHelp(for: request)) {
                 trigger(request)
@@ -449,10 +473,6 @@ struct RequestOpsView: View {
             // already running.
             .disabled(!canRun(request))
             .opacity(canRun(request) ? 1 : 0.4)
-
-            ActionIconButton(systemName: "pencil", tint: Theme.textMuted, help: "Edit request") {
-                sheetTarget = .request(folder: request.baseUrlName, request: request)
-            }
 
             ActionIconButton(systemName: "trash", tint: Theme.danger, help: "Delete request") {
                 deleteTarget = .request(request)
@@ -530,6 +550,173 @@ struct RequestOpsView: View {
     private func trigger(_ request: RequestDefinition) {
         guard canRun(request) else { return }
         sheetTarget = .run(request)
+    }
+
+    // MARK: Keyboard
+
+    /// The space key expands or collapses every folder, as the console
+    /// runtime does. It is not a button: the list stays free of controls that
+    /// act on the whole collection.
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 49,
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                  sheetTarget == nil,
+                  deleteTarget == nil,
+                  !isTextInputFocused,
+                  !folders.isEmpty
+            else { return event }
+            toggleAllFolders()
+            return nil
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
+        keyMonitor = nil
+    }
+
+    /// If any folder is folded, every folder opens; if they are all open,
+    /// every folder folds.
+    private func toggleAllFolders() {
+        let all = folders
+        guard !all.isEmpty else { return }
+        if all.allSatisfy({ expanded.contains($0) }) {
+            expanded.removeAll()
+        } else {
+            expanded.formUnion(all)
+        }
+    }
+
+    /// A text field keeps the space key for itself: the monitor never takes
+    /// it while the user is typing.
+    private var isTextInputFocused: Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return false }
+        if let textView = responder as? NSTextView {
+            return textView.isEditable
+        }
+        if let textField = responder as? NSTextField {
+            return textField.isEditable
+        }
+        return false
+    }
+
+    // MARK: Copy as cURL
+
+    /// Copies the request as the console runtime builds it: the URL with the
+    /// variables resolved, the headers, the Content-Type when the method
+    /// carries a body, and the minified body.
+    private func copyCurl(for request: RequestDefinition) {
+        let command = curlCommand(for: request)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        state.reportNotice(
+            label: "Copy cURL",
+            detail: "The request was copied as a cURL command.",
+            succeeded: true,
+            service: request.name
+        )
+    }
+
+    private func curlCommand(for request: RequestDefinition) -> String {
+        // The variables live in the request environment in use. The values
+        // the user typed are kept there as soon as the request runs, so the
+        // command shows the same values the request would use.
+        let current = state.requestEnv(selectedEnv) ?? env
+        var token = ""
+        var variables: [String: String] = [:]
+        for variable in current?.variables ?? [] {
+            if variable.name == "_token" {
+                token = variable.value
+            } else if !variable.value.isEmpty {
+                variables[variable.name] = variable.value
+            }
+        }
+
+        func substitute(_ text: String) -> String {
+            var result = text
+            for (name, value) in variables {
+                result = result.replacingOccurrences(of: "{\(name)}", with: value)
+            }
+            return result.replacingOccurrences(of: "{token}", with: token)
+        }
+
+        let method = request.method.uppercased()
+        let baseURL = current?.baseUrls.first { $0.name == request.baseUrlName }?.url ?? ""
+        var path = request.path
+        if !path.isEmpty && !path.hasPrefix("/") {
+            path = "/" + path
+        }
+
+        var url = baseURL.replacingOccurrences(of: "/+$", with: "", options: .regularExpression) + path
+        url = substitute(url)
+        if !request.params.isEmpty {
+            let query = request.params
+                .map { "\(substitute($0.key))=\(substitute($0.value))" }
+                .joined(separator: "&")
+            url += "?" + query
+        }
+
+        var command = "curl"
+        if !method.isEmpty && method != "GET" {
+            command += " -X " + method
+        }
+        command += " \\\n  '" + url + "'"
+
+        for header in request.headers {
+            command += " \\\n  -H '" + substitute(header.key) + ": " + substitute(header.value) + "'"
+        }
+
+        let carriesBody = ["POST", "PUT", "PATCH"].contains(method)
+        let hasContentType = request.headers.contains {
+            $0.key.caseInsensitiveCompare("Content-Type") == .orderedSame
+        }
+        if carriesBody && !hasContentType {
+            command += " \\\n  -H 'Content-Type: application/json'"
+        }
+
+        if carriesBody && !request.body.isEmpty {
+            let substituted = substitute(request.body)
+            let body = compactJSON(substituted) ?? substituted
+            let escaped = body.replacingOccurrences(of: "'", with: "'\\''")
+            command += " \\\n  -d '" + escaped + "'"
+        }
+
+        return command
+    }
+
+    /// Removes the whitespace outside the strings of a JSON document, and
+    /// answers nil when the text is not JSON. The order of the keys is kept.
+    private func compactJSON(_ text: String) -> String? {
+        guard let data = text.data(using: .utf8),
+              (try? JSONSerialization.jsonObject(with: data)) != nil
+        else { return nil }
+
+        var compact = ""
+        compact.reserveCapacity(text.count)
+        var inString = false
+        var escaped = false
+        for character in text {
+            if inString {
+                compact.append(character)
+                if escaped {
+                    escaped = false
+                } else if character == "\\" {
+                    escaped = true
+                } else if character == "\"" {
+                    inString = false
+                }
+            } else if character == "\"" {
+                inString = true
+                compact.append(character)
+            } else if !character.isWhitespace {
+                compact.append(character)
+            }
+        }
+        return compact
     }
 
     /// The address of the folder a request belongs to, in this environment.
@@ -1160,16 +1347,6 @@ struct RequestRunSheet: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let localError {
-                        Text(localError)
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundStyle(Theme.danger)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(10)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Theme.danger.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
-
                     FormSection("Request") {
                         VStack(alignment: .leading, spacing: 6) {
                             FieldLabel(text: "URL")
@@ -1225,25 +1402,46 @@ struct RequestRunSheet: View {
                         }
                     }
 
-                    if let result {
+                    if result != nil || localError != nil {
                         FormSection("Response") {
-                            HStack(spacing: 8) {
-                                Text("\(result.status) \(result.statusText)")
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(result.isSuccess ? Theme.running : Theme.danger)
-                                Spacer()
-                                Text("\(result.durationMs) ms")
+                            if let result {
+                                HStack(spacing: 8) {
+                                    Text("\(result.status) \(result.statusText)")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(result.isSuccess ? Theme.running : Theme.danger)
+                                    Spacer()
+                                    Text("\(result.durationMs) ms")
+                                        .font(Theme.monoSmall)
+                                        .foregroundStyle(Theme.textDim)
+                                    ActionIconButton(systemName: "doc.on.doc", tint: Theme.info, help: "Copy response") {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(result.body, forType: .string)
+                                        state.reportNotice(
+                                            label: "Copy response",
+                                            detail: "The response body is in the clipboard.",
+                                            succeeded: true,
+                                            service: request.name
+                                        )
+                                    }
+                                }
+                                Text(result.body.isEmpty ? "(empty body)" : result.body)
                                     .font(Theme.monoSmall)
-                                    .foregroundStyle(Theme.textDim)
+                                    .foregroundStyle(Theme.textMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                                    .padding(10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            } else if let localError {
+                                Text(localError)
+                                    .font(Theme.monoSmall)
+                                    .foregroundStyle(Theme.danger)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .textSelection(.enabled)
+                                    .padding(10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Theme.danger.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                             }
-                            Text(result.body.isEmpty ? "(empty body)" : result.body)
-                                .font(Theme.monoSmall)
-                                .foregroundStyle(Theme.textMuted)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .textSelection(.enabled)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                         }
                     }
                 }
