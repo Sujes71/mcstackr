@@ -377,14 +377,13 @@ struct QueueOpsView: View {
             if let table = result.table {
                 tableView(table)
             } else {
-                Text(result.output.isEmpty ? "(no output)" : result.output)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textMuted)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                LogBlock(
+                    lines: result.output.isEmpty
+                        ? ["(no output)"]
+                        : result.output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+                )
+                .padding(10)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
         }
         .padding(12)

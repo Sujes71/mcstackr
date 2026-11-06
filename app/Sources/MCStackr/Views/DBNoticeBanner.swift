@@ -44,12 +44,17 @@ struct DBNoticeBanner: View {
                         }
                     }
 
+                    // The detail of the notice, with the rows of the log: the
+                    // same format the log of the app has. The colour of the
+                    // state (red for a failure, dim for a success) is the one
+                    // the shared block has to paint: it sets the colour of
+                    // its own rows.
                     if !notice.detail.isEmpty {
-                        Text(notice.detail)
-                            .font(Theme.monoSmall)
-                            .foregroundStyle(notice.succeeded ? Theme.textDim : Theme.danger)
-                            .lineLimit(4)
-                            .fixedSize(horizontal: false, vertical: true)
+                        LogBlock(
+                            lines: notice.detail.split(separator: "\n", omittingEmptySubsequences: false).map(String.init),
+                            maxLines: 4,
+                            messageColor: notice.succeeded ? Theme.textDim : Theme.danger
+                        )
                     }
                 }
 

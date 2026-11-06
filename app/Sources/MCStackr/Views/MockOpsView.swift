@@ -273,11 +273,7 @@ struct MockOpsView: View {
             }
 
             if !result.output.isEmpty {
-                Text(result.output)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textMuted)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                LogBlock(lines: result.output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
             }
         }
         .padding(12)

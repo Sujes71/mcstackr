@@ -44,11 +44,42 @@ struct LiveLogView: View {
     static let bottomID = "live-log-bottom"
 }
 
+// MARK: - Log block
+
+/// The output of an operation, with the same format the log of the app has.
+///
+/// It is the same row the live log draws, without the scroll: the output of
+/// an operation is a fixed piece of text.
+struct LogBlock: View {
+    /// The lines of the output, oldest first.
+    let lines: [String]
+    /// How many lines it shows, when the output is long.
+    var maxLines: Int? = nil
+    /// The colour of the text of every line. A row draws its own colour, so
+    /// the block has to carry it down.
+    var messageColor: Color = Theme.text
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            ForEach(Array(shown.enumerated()), id: \.offset) { index, raw in
+                LogRow(line: LogLine(id: index, raw: raw), messageColor: messageColor)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var shown: [String] {
+        guard let maxLines else { return lines }
+        return Array(lines.prefix(maxLines))
+    }
+}
+
 // MARK: - Log row
 
 /// One line of a log, split into the parts it shows with their own colour.
 private struct LogRow: View {
     let line: LogLine
+    var messageColor: Color = Theme.text
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -66,7 +97,7 @@ private struct LogRow: View {
                     .fontWeight(.semibold)
             }
             Text(line.message)
-                .foregroundStyle(Theme.text)
+                .foregroundStyle(messageColor)
                 .textSelection(.enabled)
         }
         .font(Theme.mono)

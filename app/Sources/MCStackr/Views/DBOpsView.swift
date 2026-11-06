@@ -486,16 +486,13 @@ struct DBOpsView: View {
             }
 
             if let output = job.output, !output.isEmpty {
-                Text(output)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+                LogBlock(lines: output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
             }
             if let error = job.error, !error.isEmpty {
-                Text(error)
-                    .font(Theme.monoSmall)
-                    .foregroundStyle(Theme.danger)
-                    .fixedSize(horizontal: false, vertical: true)
+                LogBlock(
+                    lines: error.split(separator: "\n", omittingEmptySubsequences: false).map(String.init),
+                    messageColor: Theme.danger
+                )
             }
         }
         .padding(12)

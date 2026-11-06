@@ -596,10 +596,11 @@ private struct PortForwardRow: View {
                     .foregroundStyle(Theme.textDim)
                     .lineLimit(1)
                 if let error = forward.error, !error.isEmpty {
-                    Text(error)
-                        .font(Theme.monoSmall)
-                        .foregroundStyle(Theme.danger)
-                        .lineLimit(2)
+                    LogBlock(
+                        lines: error.split(separator: "\n", omittingEmptySubsequences: false).map(String.init),
+                        maxLines: 2,
+                        messageColor: Theme.danger
+                    )
                 }
             }
 
@@ -837,10 +838,10 @@ struct PortForwardEditorView: View {
 
                     if let error = forward.error, !error.isEmpty {
                         FormSection("Last error") {
-                            Text(error)
-                                .font(Theme.monoSmall)
-                                .foregroundStyle(Theme.danger)
-                                .fixedSize(horizontal: false, vertical: true)
+                            LogBlock(
+                                lines: error.split(separator: "\n", omittingEmptySubsequences: false).map(String.init),
+                                messageColor: Theme.danger
+                            )
                         }
                     }
                 }
