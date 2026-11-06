@@ -278,20 +278,24 @@ private struct HeaderView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
-                    Text(state.section.title)
-                        .font(Theme.display(28))
-                        .foregroundStyle(Theme.text)
-                        .lineLimit(1)
+                // Without a workspace there is no section: the header shows
+                // nothing but the invitation.
+                if state.selectedProfile != nil {
+                    HStack(spacing: 10) {
+                        Text(state.section.title)
+                            .font(Theme.display(28))
+                            .foregroundStyle(Theme.text)
+                            .lineLimit(1)
 
-                    if hasLive {
-                        Text("LIVE")
-                            .font(.system(size: 8.5, weight: .black, design: .rounded))
-                            .tracking(1.2)
-                            .foregroundStyle(Theme.accentInk)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Theme.accent, in: Capsule())
+                        if hasLive {
+                            Text("LIVE")
+                                .font(.system(size: 8.5, weight: .black, design: .rounded))
+                                .tracking(1.2)
+                                .foregroundStyle(Theme.accentInk)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Theme.accent, in: Capsule())
+                        }
                     }
                 }
 
@@ -304,14 +308,18 @@ private struct HeaderView: View {
             Spacer(minLength: 12)
 
             HStack(spacing: 8) {
-                ActionIconButton(
-                    systemName: "arrow.clockwise",
-                    tint: Theme.info,
-                    help: "Refresh"
-                ) {
-                    Task { await state.refreshAll() }
+                // The actions belong to a section: without a workspace there
+                // is none.
+                if state.selectedProfile != nil {
+                    ActionIconButton(
+                        systemName: "arrow.clockwise",
+                        tint: Theme.info,
+                        help: "Refresh"
+                    ) {
+                        Task { await state.refreshAll() }
+                    }
+                    .disabled(state.isRefreshing)
                 }
-                .disabled(state.isRefreshing)
 
                 switch state.section {
                 case .docker:

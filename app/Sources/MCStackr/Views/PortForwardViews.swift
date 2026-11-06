@@ -291,7 +291,13 @@ struct AddPortForwardView: View {
         localError = nil
         switch step {
         case .context: break
-        case .namespace: step = .context
+        case .namespace:
+            step = .context
+            // The context was skipped: the list has to be there when the
+            // user goes back to it.
+            if contexts.isEmpty {
+                Task { await loadContextList() }
+            }
         case .service: step = .namespace
         case .port: step = .service
         }
@@ -302,6 +308,26 @@ struct AddPortForwardView: View {
         defer { isLoading = false }
         kubectlAvailable = await state.k8sAvailable()
         guard kubectlAvailable else { return }
+
+        // The environment already holds forwards: it belongs to a context,
+        // so the window of the context is skipped and the namespaces of
+        // that context come next.
+        if let context = environmentContext, !context.isEmpty {
+            selectedContext = context
+            await loadNamespaces()
+            return
+        }
+
+        await loadContextList()
+    }
+
+    /// The context of the environment in use: the one of the forwards it
+    /// already holds.
+    private var environmentContext: String? {
+        state.environmentDetail?.portForwards.first(where: { !$0.k8sContext.isEmpty })?.k8sContext
+    }
+
+    private func loadContextList() async {
         do {
             contexts = try await state.k8sContexts()
         } catch {

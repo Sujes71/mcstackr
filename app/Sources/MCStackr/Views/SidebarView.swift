@@ -32,7 +32,11 @@ struct SidebarView: View {
 
             Spacer(minLength: 10)
 
-            footer
+            // The footer is the state of the docker section: without a
+            // workspace there is no section, and the app stays empty.
+            if state.selectedProfile != nil {
+                footer
+            }
         }
         .frame(width: 240)
         .background(Theme.sidebar)
